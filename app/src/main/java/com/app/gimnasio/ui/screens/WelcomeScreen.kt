@@ -1,5 +1,6 @@
 package com.app.gimnasio.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,10 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.app.gimnasio.R
 import com.app.gimnasio.ui.theme.DarkBackground
 import com.app.gimnasio.ui.theme.DarkBorder
 import com.app.gimnasio.ui.theme.DarkCard
@@ -54,7 +57,7 @@ fun WelcomeScreen(
     ) {
         Spacer(modifier = Modifier.weight(1f))
 
-        // Icon
+        // App icon
         Box(
             modifier = Modifier
                 .size(100.dp)
