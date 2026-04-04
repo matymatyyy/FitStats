@@ -21,7 +21,8 @@ data class NextWorkoutInfo(
     val routineName: String,
     val routineId: Long,
     val dayLabel: String, // "Hoy", "Mañana", "Lunes", etc.
-    val description: String = ""
+    val description: String = "",
+    val imagePath: String? = null
 )
 
 class PlanViewModel(application: Application) : AndroidViewModel(application) {
@@ -125,7 +126,8 @@ class PlanViewModel(application: Application) : AndroidViewModel(application) {
                 routineName = todayPlan.routineName,
                 routineId = todayPlan.routineId,
                 dayLabel = "Hoy",
-                description = routine?.description ?: ""
+                description = routine?.description ?: "",
+                imagePath = routine?.imagePath
             )
             return
         }
@@ -143,7 +145,8 @@ class PlanViewModel(application: Application) : AndroidViewModel(application) {
                     routineName = nextPlan.routineName,
                     routineId = nextPlan.routineId,
                     dayLabel = dayLabel,
-                    description = routine?.description ?: ""
+                    description = routine?.description ?: "",
+                    imagePath = routine?.imagePath
                 )
                 return
             }

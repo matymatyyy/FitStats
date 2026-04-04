@@ -46,10 +46,10 @@ class RoutinesViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun createRoutine(name: String, description: String, exercises: List<Exercise>) {
+    fun createRoutine(name: String, description: String, exercises: List<Exercise>, imagePath: String? = null) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                repository.createRoutine(name, description, exercises)
+                repository.createRoutine(name, description, exercises, imagePath)
             }
             loadRoutines()
         }
@@ -64,10 +64,10 @@ class RoutinesViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun updateRoutine(routineId: Long, name: String, description: String, exercises: List<Exercise>) {
+    fun updateRoutine(routineId: Long, name: String, description: String, exercises: List<Exercise>, imagePath: String? = null) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                repository.updateRoutine(routineId, name, description, exercises)
+                repository.updateRoutine(routineId, name, description, exercises, imagePath)
             }
             loadRoutines()
         }

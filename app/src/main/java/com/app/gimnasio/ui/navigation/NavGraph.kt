@@ -1,11 +1,23 @@
 package com.app.gimnasio.ui.navigation
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -15,9 +27,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -90,7 +106,7 @@ data class BottomNavItem(
 val bottomNavItems = listOf(
     BottomNavItem(Routes.HOME, "Inicio", Icons.Default.FitnessCenter),
     BottomNavItem(Routes.ACTIVITY, "Actividad", Icons.Default.CalendarMonth),
-    BottomNavItem(Routes.EXERCISES, "Ejercicios", Icons.AutoMirrored.Filled.List),
+    BottomNavItem(Routes.EXERCISES, "Ejercicios", Icons.Default.AccessibilityNew),
     BottomNavItem(Routes.PROFILE, "Perfil", Icons.Default.Person),
 )
 
@@ -134,6 +150,19 @@ fun GimnasioNavGraph(navController: NavHostController) {
                 ) {
                     bottomNavItems.forEach { item ->
                         val selected = currentRoute == item.route
+                        val scale by animateFloatAsState(
+                            targetValue = if (selected) 1.15f else 1f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow
+                            ),
+                            label = "navScale"
+                        )
+                        val iconAlpha by animateFloatAsState(
+                            targetValue = if (selected) 1f else 0.6f,
+                            animationSpec = tween(200),
+                            label = "navAlpha"
+                        )
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -146,20 +175,28 @@ fun GimnasioNavGraph(navController: NavHostController) {
                                 }
                             },
                             icon = {
-                                Icon(item.icon, contentDescription = item.label)
+                                Icon(
+                                    item.icon,
+                                    contentDescription = item.label,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .scale(scale)
+                                        .graphicsLayer { alpha = iconAlpha }
+                                )
                             },
                             label = {
                                 Text(
                                     text = item.label,
-                                    style = MaterialTheme.typography.labelSmall
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.graphicsLayer { alpha = iconAlpha }
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.White,
-                                selectedTextColor = Color.White,
+                                selectedIconColor = LimeGreen,
+                                selectedTextColor = LimeGreen,
                                 unselectedIconColor = TextGray,
                                 unselectedTextColor = TextGray,
-                                indicatorColor = LimeGreen.copy(alpha = 0.2f)
+                                indicatorColor = LimeGreen.copy(alpha = 0.15f)
                             )
                         )
                     }
@@ -170,7 +207,23 @@ fun GimnasioNavGraph(navController: NavHostController) {
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            modifier = if (showBottomBar) Modifier.padding(padding) else Modifier
+            modifier = if (showBottomBar) Modifier.padding(padding) else Modifier,
+            enterTransition = {
+                fadeIn(animationSpec = tween(250)) +
+                scaleIn(initialScale = 0.94f, animationSpec = tween(250))
+            },
+            exitTransition = {
+                fadeOut(animationSpec = tween(200)) +
+                scaleOut(targetScale = 1.04f, animationSpec = tween(200))
+            },
+            popEnterTransition = {
+                fadeIn(animationSpec = tween(250)) +
+                scaleIn(initialScale = 1.04f, animationSpec = tween(250))
+            },
+            popExitTransition = {
+                fadeOut(animationSpec = tween(200)) +
+                scaleOut(targetScale = 0.94f, animationSpec = tween(200))
+            }
         ) {
             composable(Routes.HOME) {
                 val weeklyCount by activityViewModel.weeklyCount.collectAsState()
@@ -290,8 +343,8 @@ fun GimnasioNavGraph(navController: NavHostController) {
                 CreateRoutineScreen(
                     viewModel = createRoutineViewModel,
                     galleryExercises = allGallery,
-                    onSave = { name, description, exercises ->
-                        routinesViewModel.createRoutine(name, description, exercises)
+                    onSave = { name, description, exercises, imagePath ->
+                        routinesViewModel.createRoutine(name, description, exercises, imagePath)
                         navController.popBackStack()
                     },
                     onBack = { navController.popBackStack() }
@@ -313,8 +366,8 @@ fun GimnasioNavGraph(navController: NavHostController) {
                 CreateRoutineScreen(
                     viewModel = createRoutineViewModel,
                     galleryExercises = allGallery,
-                    onSave = { name, description, exercises ->
-                        routinesViewModel.updateRoutine(routineId, name, description, exercises)
+                    onSave = { name, description, exercises, imagePath ->
+                        routinesViewModel.updateRoutine(routineId, name, description, exercises, imagePath)
                         createRoutineViewModel.reset()
                         navController.popBackStack()
                     },

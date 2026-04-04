@@ -25,7 +25,8 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
-                created_at INTEGER NOT NULL DEFAULT 0
+                created_at INTEGER NOT NULL DEFAULT 0,
+                image_path TEXT
             )
         """)
         db.execSQL("""
@@ -201,6 +202,11 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                 )
             """)
         }
+        if (oldVersion < 8) {
+            try {
+                db.execSQL("ALTER TABLE routines ADD COLUMN image_path TEXT")
+            } catch (_: Exception) { }
+        }
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -210,12 +216,13 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
 
     // --- Operaciones ---
 
-    fun insertRoutine(name: String, description: String, exercises: List<Exercise>): Long {
+    fun insertRoutine(name: String, description: String, exercises: List<Exercise>, imagePath: String? = null): Long {
         val db = writableDatabase
         val routineId = db.insert("routines", null, ContentValues().apply {
             put("name", name)
             put("description", description)
             put("created_at", System.currentTimeMillis())
+            put("image_path", imagePath)
         })
 
         exercises.forEachIndexed { index, exercise ->
@@ -241,7 +248,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
         val routines = mutableListOf<Routine>()
 
         val cursor = db.rawQuery(
-            "SELECT id, name, description, created_at FROM routines ORDER BY created_at DESC",
+            "SELECT id, name, description, created_at, image_path FROM routines ORDER BY created_at DESC",
             null
         )
         cursor.use {
@@ -253,7 +260,8 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                         name = it.getString(1),
                         description = it.getString(2),
                         createdAt = it.getLong(3),
-                        exercises = getExercisesForRoutine(id)
+                        exercises = getExercisesForRoutine(id),
+                        imagePath = if (it.isNull(4)) null else it.getString(4)
                     )
                 )
             }
@@ -264,7 +272,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
     fun getRoutineById(id: Long): Routine? {
         val db = readableDatabase
         val cursor = db.rawQuery(
-            "SELECT id, name, description, created_at FROM routines WHERE id = ?",
+            "SELECT id, name, description, created_at, image_path FROM routines WHERE id = ?",
             arrayOf(id.toString())
         )
         cursor.use {
@@ -274,7 +282,8 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                     name = it.getString(1),
                     description = it.getString(2),
                     createdAt = it.getLong(3),
-                    exercises = getExercisesForRoutine(id)
+                    exercises = getExercisesForRoutine(id),
+                    imagePath = if (it.isNull(4)) null else it.getString(4)
                 )
             }
         }
@@ -286,13 +295,14 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
         db.delete("routines", "id = ?", arrayOf(routineId.toString()))
     }
 
-    fun updateRoutine(routineId: Long, name: String, description: String, exercises: List<Exercise>) {
+    fun updateRoutine(routineId: Long, name: String, description: String, exercises: List<Exercise>, imagePath: String? = null) {
         val db = writableDatabase
         db.beginTransaction()
         try {
             db.update("routines", ContentValues().apply {
                 put("name", name)
                 put("description", description)
+                put("image_path", imagePath)
             }, "id = ?", arrayOf(routineId.toString()))
 
             db.delete("routine_exercises", "routine_id = ?", arrayOf(routineId.toString()))
@@ -690,7 +700,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
 
     companion object {
         const val DATABASE_NAME = "gimnasio.db"
-        const val DATABASE_VERSION = 7
+        const val DATABASE_VERSION = 8
 
         @Volatile
         private var INSTANCE: GimnasioDatabase? = null

@@ -5,5 +5,6 @@ data class Routine(
     val name: String,
     val description: String,
     val exercises: List<Exercise> = emptyList(),
-    val createdAt: Long = 0
+    val createdAt: Long = 0,
+    val imagePath: String? = null
 )

@@ -1,5 +1,10 @@
 package com.app.gimnasio.ui.screens
 
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,10 +57,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.io.File
+import java.util.UUID
 import com.app.gimnasio.data.model.Exercise
 import com.app.gimnasio.data.model.ExerciseInfo
 import com.app.gimnasio.data.model.ExercisePhase
@@ -71,11 +82,12 @@ import com.app.gimnasio.ui.viewmodel.CreateRoutineViewModel
 fun CreateRoutineScreen(
     viewModel: CreateRoutineViewModel,
     galleryExercises: List<ExerciseInfo>,
-    onSave: (String, String, List<Exercise>) -> Unit,
+    onSave: (String, String, List<Exercise>, String?) -> Unit,
     onBack: () -> Unit
 ) {
     val name by viewModel.routineName.collectAsState()
     val description by viewModel.routineDescription.collectAsState()
+    val imagePath by viewModel.routineImagePath.collectAsState()
     val warmupExercises by viewModel.warmupExercises.collectAsState()
     val strengthExercises by viewModel.strengthExercises.collectAsState()
     val isEditMode = viewModel.editingRoutineId != null
@@ -84,6 +96,21 @@ fun CreateRoutineScreen(
     var showStrengthDialog by remember { mutableStateOf(false) }
     var editingWarmupIndex by remember { mutableStateOf<Int?>(null) }
     var editingStrengthIndex by remember { mutableStateOf<Int?>(null) }
+
+    val context = LocalContext.current
+    val imageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val dir = File(context.filesDir, "routine_images")
+            if (!dir.exists()) dir.mkdirs()
+            val file = File(dir, "routine_${UUID.randomUUID()}.jpg")
+            context.contentResolver.openInputStream(it)?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+            viewModel.routineImagePath.value = file.absolutePath
+        }
+    }
 
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = LimeGreen,
@@ -141,6 +168,56 @@ fun CreateRoutineScreen(
                 maxLines = 2
             )
 
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Image picker
+            Text(
+                text = "Imagen (opcional)",
+                color = TextGray,
+                fontSize = 13.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (imagePath != null) {
+                val file = File(imagePath!!)
+                if (file.exists()) {
+                    val bitmap = remember(imagePath) {
+                        BitmapFactory.decodeFile(file.absolutePath)
+                    }
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Imagen de rutina",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { imageLauncher.launch("image/*") },
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row {
+                    TextButton(onClick = { imageLauncher.launch("image/*") }) {
+                        Text("Cambiar", color = LimeGreen, fontSize = 13.sp)
+                    }
+                    TextButton(onClick = { viewModel.routineImagePath.value = null }) {
+                        Text("Quitar", color = Color(0xFFFF6B6B), fontSize = 13.sp)
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { imageLauncher.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    border = ButtonDefaults.outlinedButtonBorder(true).copy(width = 1.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = LimeGreen)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Agregar imagen", color = LimeGreen)
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
 
             // --- CALENTAMIENTO / MOVILIDAD ---
@@ -195,7 +272,7 @@ fun CreateRoutineScreen(
             Button(
                 onClick = {
                     if (viewModel.isValid()) {
-                        onSave(name, description, viewModel.getAllExercises())
+                        onSave(name, description, viewModel.getAllExercises(), imagePath)
                         viewModel.reset()
                     }
                 },

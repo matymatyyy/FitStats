@@ -10,11 +10,11 @@ class RoutineRepository(private val db: GimnasioDatabase) {
 
     fun getRoutineById(id: Long): Routine? = db.getRoutineById(id)
 
-    fun createRoutine(name: String, description: String, exercises: List<Exercise>): Long =
-        db.insertRoutine(name, description, exercises)
+    fun createRoutine(name: String, description: String, exercises: List<Exercise>, imagePath: String? = null): Long =
+        db.insertRoutine(name, description, exercises, imagePath)
 
     fun deleteRoutine(routineId: Long) = db.deleteRoutine(routineId)
 
-    fun updateRoutine(routineId: Long, name: String, description: String, exercises: List<Exercise>) =
-        db.updateRoutine(routineId, name, description, exercises)
+    fun updateRoutine(routineId: Long, name: String, description: String, exercises: List<Exercise>, imagePath: String? = null) =
+        db.updateRoutine(routineId, name, description, exercises, imagePath)
 }

@@ -12,6 +12,7 @@ class CreateRoutineViewModel : ViewModel() {
 
     val routineName = MutableStateFlow("")
     val routineDescription = MutableStateFlow("")
+    val routineImagePath = MutableStateFlow<String?>(null)
 
     var editingRoutineId: Long? = null
         private set
@@ -57,6 +58,7 @@ class CreateRoutineViewModel : ViewModel() {
         editingRoutineId = routine.id
         routineName.value = routine.name
         routineDescription.value = routine.description
+        routineImagePath.value = routine.imagePath
         _warmupExercises.value = routine.exercises.filter { it.phase == ExercisePhase.WARMUP }
         _strengthExercises.value = routine.exercises.filter { it.phase == ExercisePhase.STRENGTH }
     }
@@ -65,6 +67,7 @@ class CreateRoutineViewModel : ViewModel() {
         editingRoutineId = null
         routineName.value = ""
         routineDescription.value = ""
+        routineImagePath.value = null
         _warmupExercises.value = emptyList()
         _strengthExercises.value = emptyList()
     }

@@ -1,11 +1,16 @@
 package com.app.gimnasio.ui.screens
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,8 +30,13 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +48,7 @@ import com.app.gimnasio.ui.theme.DarkSurface
 import com.app.gimnasio.ui.theme.LimeGreen
 import com.app.gimnasio.ui.theme.TextGray
 import com.app.gimnasio.ui.viewmodel.RoutinesViewModel
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,34 +138,57 @@ private fun RoutineItem(routine: Routine, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = DarkCard),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = routine.name,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
-            if (routine.description.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = routine.description,
-                    color = TextGray,
-                    fontSize = 14.sp
+                    text = routine.name,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                if (routine.description.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = routine.description,
+                        color = TextGray,
+                        fontSize = 14.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                val parts = mutableListOf<String>()
+                if (warmupCount > 0) parts.add("$warmupCount calentamiento")
+                if (strengthCount > 0) parts.add("$strengthCount fuerza")
+                Text(
+                    text = parts.joinToString(" · "),
+                    color = LimeGreen,
+                    fontSize = 13.sp
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            val parts = mutableListOf<String>()
-            if (warmupCount > 0) parts.add("$warmupCount calentamiento")
-            if (strengthCount > 0) parts.add("$strengthCount fuerza")
-            Text(
-                text = parts.joinToString(" · "),
-                color = LimeGreen,
-                fontSize = 13.sp
-            )
+
+            if (routine.imagePath != null) {
+                val file = File(routine.imagePath)
+                if (file.exists()) {
+                    val bitmap = remember(routine.imagePath) {
+                        BitmapFactory.decodeFile(file.absolutePath)
+                    }
+                    if (bitmap != null) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Imagen de rutina",
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+            }
         }
     }
 }

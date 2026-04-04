@@ -30,7 +30,7 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -244,8 +244,8 @@ private fun TopProfileBar(
 
         IconButton(onClick = onSettingsClick) {
             Icon(
-                Icons.Default.Tune,
-                contentDescription = "Ajustes",
+                Icons.Default.Menu,
+                contentDescription = "Menú",
                 tint = MaterialTheme.colorScheme.onBackground
             )
         }
@@ -343,30 +343,62 @@ private fun NextWorkoutCard(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1F2E))
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Gym background gradient
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF2A3040),
-                                Color(0xFF1A1F2E),
-                                Color(0xFF0D1117)
+            // Background: routine image or gradient fallback
+            val routineImagePath = nextWorkout?.imagePath
+            val routineImageFile = routineImagePath?.let { File(it) }
+            val hasImage = routineImageFile?.exists() == true
+
+            if (hasImage) {
+                val bitmap = remember(routineImagePath) {
+                    BitmapFactory.decodeFile(routineImageFile!!.absolutePath)
+                }
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    // Dark overlay for text readability
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0x40000000),
+                                        Color(0x80000000),
+                                        Color(0xCC000000)
+                                    )
+                                )
+                            )
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF2A3040),
+                                    Color(0xFF1A1F2E),
+                                    Color(0xFF0D1117)
+                                )
                             )
                         )
-                    )
-            )
+                )
 
-            // Gym icon as placeholder for image
-            Icon(
-                Icons.Default.FitnessCenter,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(120.dp)
-                    .align(Alignment.Center),
-                tint = Color(0xFF2A3040)
-            )
+                // Gym icon as placeholder
+                Icon(
+                    Icons.Default.FitnessCenter,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(120.dp)
+                        .align(Alignment.Center),
+                    tint = Color(0xFF2A3040)
+                )
+            }
 
             // Top badges
             Row(
