@@ -10,6 +10,7 @@ import com.app.gimnasio.data.model.Routine
 import com.app.gimnasio.data.model.WorkoutLog
 import com.app.gimnasio.data.repository.RoutineRepository
 import com.app.gimnasio.data.repository.WorkoutRepository
+import com.app.gimnasio.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -223,6 +224,7 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                     )
                 )
             }
+            WidgetUpdater.updateAll(getApplication())
         }
     }
 

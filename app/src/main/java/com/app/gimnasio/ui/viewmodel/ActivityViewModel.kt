@@ -1,6 +1,7 @@
 package com.app.gimnasio.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.gimnasio.GimnasioApplication
@@ -42,11 +43,39 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     private val _weeklyTotalSets = MutableStateFlow(0)
     val weeklyTotalSets: StateFlow<Int> = _weeklyTotalSets.asStateFlow()
 
+    // Period-based stats (7/14/30 days)
+    private val _periodDays = MutableStateFlow(7)
+    val periodDays: StateFlow<Int> = _periodDays.asStateFlow()
+
+    private val _periodWorkouts = MutableStateFlow(0)
+    val periodWorkouts: StateFlow<Int> = _periodWorkouts.asStateFlow()
+
+    private val _periodTotalSeconds = MutableStateFlow(0)
+    val periodTotalSeconds: StateFlow<Int> = _periodTotalSeconds.asStateFlow()
+
+    private val _periodTotalSets = MutableStateFlow(0)
+    val periodTotalSets: StateFlow<Int> = _periodTotalSets.asStateFlow()
+
+    // Daily calories for chart: list of (dayLabel, calories)
+    private val _dailyCalories = MutableStateFlow<List<Pair<String, Int>>>(emptyList())
+    val dailyCalories: StateFlow<List<Pair<String, Int>>> = _dailyCalories.asStateFlow()
+
+    // Widget suggestion banner
+    private val prefs = application.getSharedPreferences("fitstats_prefs", Context.MODE_PRIVATE)
+    private val _showWidgetBanner = MutableStateFlow(!prefs.getBoolean("widget_banner_dismissed", false))
+    val showWidgetBanner: StateFlow<Boolean> = _showWidgetBanner.asStateFlow()
+
+    fun dismissWidgetBanner() {
+        _showWidgetBanner.value = false
+        prefs.edit().putBoolean("widget_banner_dismissed", true).apply()
+    }
+
     init {
         val db = (application as GimnasioApplication).database
         repository = WorkoutRepository(db)
         loadMonthData()
         loadWeeklyData()
+        loadPeriodData()
     }
 
     fun loadMonthData() {
@@ -92,6 +121,57 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             _weeklyCount.value = dates.size
             _weeklyTotalSeconds.value = logs.sumOf { it.durationSeconds }
             _weeklyTotalSets.value = logs.sumOf { it.totalSets }
+        }
+    }
+
+    fun setPeriod(days: Int) {
+        _periodDays.value = days
+        loadPeriodData()
+    }
+
+    fun loadPeriodData() {
+        viewModelScope.launch {
+            val days = _periodDays.value
+            val cal = Calendar.getInstance()
+            cal.set(Calendar.HOUR_OF_DAY, 0)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            val today = cal.timeInMillis
+
+            cal.add(Calendar.DAY_OF_YEAR, -(days - 1))
+            val start = cal.timeInMillis
+
+            val logs = withContext(Dispatchers.IO) {
+                repository.getWorkoutLogsByDateRange(start, today)
+            }
+
+            val dates = logs.map { it.date }.toSet()
+            _periodWorkouts.value = dates.size
+            _periodTotalSeconds.value = logs.sumOf { it.durationSeconds }
+            _periodTotalSets.value = logs.sumOf { it.totalSets }
+
+            // Build daily calories list
+            val logsByDate = logs.groupBy { it.date }
+            val dayNames = arrayOf("D", "L", "M", "X", "J", "V", "S")
+            val dailyList = mutableListOf<Pair<String, Int>>()
+            val iterCal = Calendar.getInstance()
+            iterCal.timeInMillis = start
+            for (i in 0 until days) {
+                iterCal.set(Calendar.HOUR_OF_DAY, 0)
+                iterCal.set(Calendar.MINUTE, 0)
+                iterCal.set(Calendar.SECOND, 0)
+                iterCal.set(Calendar.MILLISECOND, 0)
+                val dateMs = iterCal.timeInMillis
+                val dayLogs = logsByDate[dateMs] ?: emptyList()
+                val seconds = dayLogs.sumOf { it.durationSeconds }
+                val cals = (seconds / 3600.0 * 300).toInt()
+                val dow = iterCal.get(Calendar.DAY_OF_WEEK)
+                val label = dayNames[dow - 1]
+                dailyList.add(label to cals)
+                iterCal.add(Calendar.DAY_OF_YEAR, 1)
+            }
+            _dailyCalories.value = dailyList
         }
     }
 

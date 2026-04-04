@@ -1,6 +1,16 @@
 package com.app.gimnasio.ui.screens
 
+import android.Manifest
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,30 +41,43 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -65,7 +88,10 @@ import com.app.gimnasio.ui.theme.DarkSurface
 import com.app.gimnasio.ui.theme.LimeGreen
 import com.app.gimnasio.ui.theme.TextGray
 import com.app.gimnasio.ui.theme.TextDarkGray
+import com.app.gimnasio.notification.ReminderScheduler
 import com.app.gimnasio.ui.viewmodel.NextWorkoutInfo
+import com.app.gimnasio.widget.NextWorkoutWidgetReceiver
+import com.app.gimnasio.widget.WeeklyStatsWidgetReceiver
 import java.io.File
 
 data class WeeklyStats(
@@ -95,7 +121,13 @@ fun HomeScreen(
     nextWorkout: NextWorkoutInfo? = null,
     hasPlan: Boolean = false,
     showInfoCard: Boolean = false,
-    onDismissInfoCard: () -> Unit = {}
+    onDismissInfoCard: () -> Unit = {},
+    periodDays: Int = 7,
+    periodWorkouts: Int = 0,
+    periodTotalSeconds: Int = 0,
+    periodTotalSets: Int = 0,
+    dailyCalories: List<Pair<String, Int>> = emptyList(),
+    onPeriodChange: (Int) -> Unit = {}
 ) {
     var showSettingsSheet by remember { mutableStateOf(false) }
 
@@ -165,8 +197,15 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Weekly stats
-        WeeklyStatsSection(stats = weeklyStats)
+        // Period stats with selector
+        PeriodStatsSection(
+            periodDays = periodDays,
+            workouts = periodWorkouts,
+            totalSeconds = periodTotalSeconds,
+            totalSets = periodTotalSets,
+            dailyCalories = dailyCalories,
+            onPeriodChange = onPeriodChange
+        )
 
         Spacer(modifier = Modifier.height(100.dp)) // space for bottom nav
     }
@@ -558,14 +597,51 @@ private fun SmallActionCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WeeklyStatsSection(stats: WeeklyStats) {
+private fun PeriodStatsSection(
+    periodDays: Int,
+    workouts: Int,
+    totalSeconds: Int,
+    totalSets: Int,
+    dailyCalories: List<Pair<String, Int>>,
+    onPeriodChange: (Int) -> Unit
+) {
+    val periodLabel = when (periodDays) {
+        7 -> "Últimos 7 días"
+        14 -> "Últimos 14 días"
+        30 -> "Últimos 30 días"
+        else -> "Últimos $periodDays días"
+    }
+    val calories = (totalSeconds / 3600.0 * 300).toInt()
+
     Text(
-        text = "Últimos 7 días",
+        text = periodLabel,
         color = Color.White,
         fontWeight = FontWeight.Bold,
         fontSize = 22.sp
     )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // Period selector chips
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        listOf(7, 14, 30).forEach { days ->
+            FilterChip(
+                selected = periodDays == days,
+                onClick = { onPeriodChange(days) },
+                label = { Text("${days}d") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = LimeGreen.copy(alpha = 0.2f),
+                    selectedLabelColor = LimeGreen,
+                    containerColor = DarkCard,
+                    labelColor = TextGray
+                )
+            )
+        }
+    }
 
     Spacer(modifier = Modifier.height(12.dp))
 
@@ -576,27 +652,154 @@ private fun WeeklyStatsSection(stats: WeeklyStats) {
         StatItem(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.FitnessCenter,
-            value = "${stats.workouts}",
+            value = "$workouts",
             label = "Entrenos"
         )
         StatItem(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.Timer,
-            value = formatVolume(stats.totalSeconds),
+            value = formatVolume(totalSeconds),
             label = "Volumen"
         )
         StatItem(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.CheckCircle,
-            value = "${stats.totalSets}",
+            value = "$totalSets",
             label = "Series"
         )
         StatItem(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.LocalFireDepartment,
-            value = "${stats.calories}",
+            value = "$calories",
             label = "kcal"
         )
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    // Calories chart
+    CaloriesChart(dailyCalories = dailyCalories)
+}
+
+@Composable
+private fun CaloriesChart(dailyCalories: List<Pair<String, Int>>) {
+    if (dailyCalories.isEmpty()) return
+
+    val maxCal = (dailyCalories.maxOfOrNull { it.second } ?: 1).coerceAtLeast(1)
+    val totalCal = dailyCalories.sumOf { it.second }
+    val limeGreen = LimeGreen
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.LocalFireDepartment,
+                        contentDescription = null,
+                        tint = LimeGreen,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Calorías quemadas",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
+                Text(
+                    text = "$totalCal kcal",
+                    color = LimeGreen,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Bar chart
+            val animProgress by animateFloatAsState(
+                targetValue = 1f,
+                animationSpec = tween(600),
+                label = "chartAnim"
+            )
+
+            // Determine how many labels to show to avoid overlap
+            val totalBars = dailyCalories.size
+            val labelStep = when {
+                totalBars <= 7 -> 1
+                totalBars <= 14 -> 2
+                else -> 5
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+            ) {
+                val barCount = dailyCalories.size
+                val spacing = 2.dp.toPx()
+                val totalSpacing = spacing * (barCount - 1)
+                val barWidth = ((size.width - totalSpacing) / barCount).coerceAtLeast(2f)
+                val cornerRad = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+
+                dailyCalories.forEachIndexed { index, (_, cal) ->
+                    val fraction = (cal.toFloat() / maxCal) * animProgress
+                    val barHeight = (fraction * size.height * 0.85f).coerceAtLeast(if (cal > 0) 4f else 0f)
+                    val x = index * (barWidth + spacing)
+                    val y = size.height - barHeight
+
+                    // Bar background (subtle)
+                    drawRoundRect(
+                        color = limeGreen.copy(alpha = 0.08f),
+                        topLeft = Offset(x, size.height * 0.15f),
+                        size = Size(barWidth, size.height * 0.85f),
+                        cornerRadius = cornerRad
+                    )
+
+                    // Actual bar
+                    if (cal > 0) {
+                        drawRoundRect(
+                            color = limeGreen.copy(alpha = 0.5f + 0.5f * fraction),
+                            topLeft = Offset(x, y),
+                            size = Size(barWidth, barHeight),
+                            cornerRadius = cornerRad
+                        )
+                    }
+                }
+            }
+
+            // Day labels
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                dailyCalories.forEachIndexed { index, (label, _) ->
+                    if (index % labelStep == 0) {
+                        Text(
+                            text = label,
+                            color = TextGray,
+                            fontSize = 9.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.width(16.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -661,6 +864,7 @@ private fun SettingsBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp)
         ) {
@@ -721,6 +925,172 @@ private fun SettingsBottomSheet(
                 fontSize = 18.sp
             )
             Spacer(modifier = Modifier.height(12.dp))
+
+            // Widgets section
+            val context = LocalContext.current
+            val appWidgetManager = remember { AppWidgetManager.getInstance(context) }
+
+            SettingsNavItem(
+                icon = Icons.Default.Widgets,
+                title = "Widget: Próximo Entreno",
+                subtitle = "Agregar a la pantalla de inicio",
+                onClick = {
+                    if (appWidgetManager.isRequestPinAppWidgetSupported) {
+                        val provider = ComponentName(context, NextWorkoutWidgetReceiver::class.java)
+                        appWidgetManager.requestPinAppWidget(provider, null, null)
+                    }
+                }
+            )
+            SettingsNavItem(
+                icon = Icons.Default.Widgets,
+                title = "Widget: Esta Semana",
+                subtitle = "Agregar resumen semanal",
+                onClick = {
+                    if (appWidgetManager.isRequestPinAppWidgetSupported) {
+                        val provider = ComponentName(context, WeeklyStatsWidgetReceiver::class.java)
+                        appWidgetManager.requestPinAppWidget(provider, null, null)
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Notification reminder toggle
+            val prefs = remember { context.getSharedPreferences("fitstats_prefs", android.content.Context.MODE_PRIVATE) }
+            var reminderEnabled by remember { mutableStateOf(prefs.getBoolean("daily_reminder_enabled", false)) }
+            var reminderHour by remember { mutableIntStateOf(prefs.getInt("reminder_hour", 8)) }
+            var reminderMinute by remember { mutableIntStateOf(prefs.getInt("reminder_minute", 0)) }
+
+            // Notification permission launcher
+            val permissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                if (granted) {
+                    reminderEnabled = true
+                    ReminderScheduler.schedule(context, reminderHour, reminderMinute)
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(DarkCard),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Notifications,
+                        contentDescription = null,
+                        tint = LimeGreen,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Recordatorio diario",
+                        color = Color.White,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = if (reminderEnabled) "Todos los días a las ${"%02d:%02d".format(reminderHour, reminderMinute)}" else "Desactivado",
+                        color = TextGray,
+                        fontSize = 12.sp
+                    )
+                }
+                Switch(
+                    checked = reminderEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                reminderEnabled = true
+                                ReminderScheduler.schedule(context, reminderHour, reminderMinute)
+                            }
+                        } else {
+                            reminderEnabled = false
+                            ReminderScheduler.cancel(context)
+                        }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = LimeGreen,
+                        uncheckedThumbColor = TextGray,
+                        uncheckedTrackColor = DarkCard
+                    )
+                )
+            }
+
+            // Time picker for reminder
+            if (reminderEnabled) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 48.dp, top = 4.dp, bottom = 4.dp)
+                ) {
+                    Text("Hora:", color = TextGray, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(7 to 0, 8 to 0, 9 to 0).forEach { (h, m) ->
+                            val selected = reminderHour == h && reminderMinute == m
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    reminderHour = h
+                                    reminderMinute = m
+                                    ReminderScheduler.schedule(context, h, m)
+                                },
+                                label = { Text("%02d:%02d".format(h, m)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LimeGreen.copy(alpha = 0.2f),
+                                    selectedLabelColor = LimeGreen,
+                                    containerColor = DarkCard,
+                                    labelColor = TextGray
+                                )
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(10 to 0, 18 to 0, 20 to 0).forEach { (h, m) ->
+                            val selected = reminderHour == h && reminderMinute == m
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    reminderHour = h
+                                    reminderMinute = m
+                                    ReminderScheduler.schedule(context, h, m)
+                                },
+                                label = { Text("%02d:%02d".format(h, m)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LimeGreen.copy(alpha = 0.2f),
+                                    selectedLabelColor = LimeGreen,
+                                    containerColor = DarkCard,
+                                    labelColor = TextGray
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "El objetivo semanal se ajusta automáticamente según tu planificación.",

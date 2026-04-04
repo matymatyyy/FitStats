@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">FitStats</string>
+    <string name="widget_next_workout_desc">Muestra tu próximo entrenamiento programado</string>
+    <string name="widget_weekly_stats_desc">Resumen de tu actividad de la semana</string>
 </resources>

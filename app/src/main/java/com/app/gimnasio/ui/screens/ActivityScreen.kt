@@ -1,5 +1,8 @@
 package com.app.gimnasio.ui.screens
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -61,6 +66,7 @@ import com.app.gimnasio.ui.theme.LimeGreen
 import com.app.gimnasio.ui.theme.TextGray
 import com.app.gimnasio.ui.theme.TextDarkGray
 import com.app.gimnasio.ui.viewmodel.ActivityViewModel
+import com.app.gimnasio.widget.NextWorkoutWidgetReceiver
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -71,7 +77,9 @@ fun ActivityScreen(viewModel: ActivityViewModel) {
     val monthWorkouts by viewModel.monthWorkouts.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val selectedDateWorkouts by viewModel.selectedDateWorkouts.collectAsState()
+    val showWidgetBanner by viewModel.showWidgetBanner.collectAsState()
 
+    val context = LocalContext.current
     var showManualDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -106,6 +114,24 @@ fun ActivityScreen(viewModel: ActivityViewModel) {
                     fontSize = 14.sp
                 )
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Widget suggestion banner
+            if (showWidgetBanner) {
+                item {
+                    WidgetSuggestionBanner(
+                        onAdd = {
+                            val appWidgetManager = AppWidgetManager.getInstance(context)
+                            if (appWidgetManager.isRequestPinAppWidgetSupported) {
+                                val provider = ComponentName(context, NextWorkoutWidgetReceiver::class.java)
+                                appWidgetManager.requestPinAppWidget(provider, null, null)
+                            }
+                            viewModel.dismissWidgetBanner()
+                        },
+                        onDismiss = { viewModel.dismissWidgetBanner() }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
             }
 
             // Calendar
@@ -436,4 +462,81 @@ private fun ManualWorkoutDialog(
             }
         }
     )
+}
+
+@Composable
+private fun WidgetSuggestionBanner(
+    onAdd: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = LimeGreen.copy(alpha = 0.1f)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Icon(
+                    Icons.Default.Widgets,
+                    contentDescription = null,
+                    tint = LimeGreen,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Widget en tu pantalla",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Agregalo para ver tu proximo entrenamiento sin abrir la app",
+                        color = TextGray,
+                        fontSize = 13.sp
+                    )
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Cerrar",
+                        tint = TextGray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onAdd,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = LimeGreen,
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Agregar widget",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
 }

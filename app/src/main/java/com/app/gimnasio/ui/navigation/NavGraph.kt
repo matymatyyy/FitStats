@@ -234,6 +234,11 @@ fun GimnasioNavGraph(navController: NavHostController) {
                 val planDays by planViewModel.planDays.collectAsState()
                 val showInfoCard by profileViewModel.showInfoCard.collectAsState()
                 val weeklyGoal = if (planDays.isNotEmpty()) planDays.size else 5
+                val periodDays by activityViewModel.periodDays.collectAsState()
+                val periodWorkouts by activityViewModel.periodWorkouts.collectAsState()
+                val periodTotalSeconds by activityViewModel.periodTotalSeconds.collectAsState()
+                val periodTotalSets by activityViewModel.periodTotalSets.collectAsState()
+                val dailyCalories by activityViewModel.dailyCalories.collectAsState()
                 LaunchedEffect(Unit) { planViewModel.loadPlan() }
                 HomeScreen(
                     onNavigateToRoutines = { navController.navigate(Routes.ROUTINES) },
@@ -275,7 +280,13 @@ fun GimnasioNavGraph(navController: NavHostController) {
                     nextWorkout = nextWorkout,
                     hasPlan = hasPlan,
                     showInfoCard = showInfoCard,
-                    onDismissInfoCard = { profileViewModel.dismissInfoCard() }
+                    onDismissInfoCard = { profileViewModel.dismissInfoCard() },
+                    periodDays = periodDays,
+                    periodWorkouts = periodWorkouts,
+                    periodTotalSeconds = periodTotalSeconds,
+                    periodTotalSets = periodTotalSets,
+                    dailyCalories = dailyCalories,
+                    onPeriodChange = { activityViewModel.setPeriod(it) }
                 )
             }
 
