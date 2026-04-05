@@ -4,9 +4,11 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,6 +31,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -38,6 +42,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuAnchorType
@@ -54,23 +60,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.gimnasio.data.model.BodyMeasurements
+import com.app.gimnasio.data.model.PRHistoryEntry
 import com.app.gimnasio.data.model.PersonalRecords
 import com.app.gimnasio.ui.theme.DarkBackground
 import com.app.gimnasio.ui.theme.DarkBorder
 import com.app.gimnasio.ui.theme.DarkCard
+import com.app.gimnasio.ui.theme.DarkSurface
 import com.app.gimnasio.ui.theme.LimeGreen
 import com.app.gimnasio.ui.theme.TextDarkGray
 import com.app.gimnasio.ui.theme.TextGray
 import com.app.gimnasio.ui.viewmodel.ProfileViewModel
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private fun formatDate(millis: Long?): String? {
+    if (millis == null) return null
+    return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(millis))
+}
 
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel) {
@@ -78,10 +99,12 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
     val measurements by viewModel.measurements.collectAsState()
     val personalRecords by viewModel.personalRecords.collectAsState()
     val totalWorkouts by viewModel.totalWorkouts.collectAsState()
+    val prHistory by viewModel.prHistory.collectAsState()
 
     var showEditDialog by remember { mutableStateOf(false) }
     var showMeasurementsDialog by remember { mutableStateOf(false) }
     var showPRDialog by remember { mutableStateOf(false) }
+    var showPRChartDialog by remember { mutableStateOf(false) }
 
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -133,41 +156,47 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                     // Profile photo
                     Box(
                         modifier = Modifier
-                            .size(100.dp)
-                            .clip(CircleShape)
-                            .background(LimeGreen.copy(alpha = 0.15f))
+                            .size(110.dp)
                             .clickable { photoLauncher.launch("image/*") },
                         contentAlignment = Alignment.Center
                     ) {
-                        val photoPath = profile.photoPath
-                        if (photoPath != null && File(photoPath).exists()) {
-                            val bitmap = remember(photoPath) {
-                                BitmapFactory.decodeFile(photoPath)
-                            }
-                            if (bitmap != null) {
-                                Image(
-                                    bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "Foto de perfil",
-                                    modifier = Modifier
-                                        .size(100.dp)
-                                        .clip(CircleShape),
-                                    contentScale = ContentScale.Crop
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(CircleShape)
+                                .background(LimeGreen.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val photoPath = profile.photoPath
+                            if (photoPath != null && File(photoPath).exists()) {
+                                val bitmap = remember(photoPath) {
+                                    BitmapFactory.decodeFile(photoPath)
+                                }
+                                if (bitmap != null) {
+                                    Image(
+                                        bitmap = bitmap.asImageBitmap(),
+                                        contentDescription = "Foto de perfil",
+                                        modifier = Modifier
+                                            .size(100.dp)
+                                            .clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = LimeGreen,
+                                    modifier = Modifier.size(50.dp)
                                 )
                             }
-                        } else {
-                            Icon(
-                                Icons.Default.Person,
-                                contentDescription = null,
-                                tint = LimeGreen,
-                                modifier = Modifier.size(50.dp)
-                            )
                         }
 
-                        // Camera overlay
+                        // Camera icon outside the circle
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .size(30.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(LimeGreen),
                             contentAlignment = Alignment.Center
@@ -192,7 +221,6 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Age and gender
                     val infoItems = listOfNotNull(
                         profile.age?.let { "${it} años" },
                         profile.gender
@@ -286,7 +314,18 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Show last updated date
+                    val measDate = formatDate(measurements.updatedAt)
+                    if (measDate != null) {
+                        Text(
+                            text = "Actualizado: $measDate",
+                            color = TextGray,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     val measurementsList = listOf(
                         "Cintura" to measurements.cintura,
@@ -336,12 +375,30 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                                 fontSize = 18.sp
                             )
                         }
-                        IconButton(onClick = { showPRDialog = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Editar PRs", tint = LimeGreen, modifier = Modifier.size(20.dp))
+                        Row {
+                            if (prHistory.size >= 2) {
+                                IconButton(onClick = { showPRChartDialog = true }) {
+                                    Icon(Icons.AutoMirrored.Filled.ShowChart, contentDescription = "Ver progreso", tint = LimeGreen, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                            IconButton(onClick = { showPRDialog = true }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Editar PRs", tint = LimeGreen, modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Show last updated date
+                    val prDate = formatDate(personalRecords.updatedAt)
+                    if (prDate != null) {
+                        Text(
+                            text = "Actualizado: $prDate",
+                            color = TextGray,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     val prList = listOf(
                         "Sentadillas" to personalRecords.sentadillas,
@@ -393,6 +450,13 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                 viewModel.savePersonalRecords(pr)
                 showPRDialog = false
             }
+        )
+    }
+
+    if (showPRChartDialog) {
+        PRChartDialog(
+            history = prHistory,
+            onDismiss = { showPRChartDialog = false }
         )
     }
 }
@@ -486,11 +550,7 @@ private fun EditProfileDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        onSave(
-                            name.trim(),
-                            ageText.toIntOrNull(),
-                            gender.ifBlank { null }
-                        )
+                        onSave(name.trim(), ageText.toIntOrNull(), gender.ifBlank { null })
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = LimeGreen),
@@ -500,9 +560,7 @@ private fun EditProfileDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = TextGray)
-            }
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = TextGray) }
         }
     )
 }
@@ -533,38 +591,24 @@ private fun EditMeasurementsDialog(
                 modifier = Modifier.height(400.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val fields = listOf(
-                        "Cintura" to cintura,
-                        "Abdomen" to abdomen,
-                        "Glúteos" to gluteos,
-                        "Pecho" to pecho,
-                        "Hombros" to hombros,
-                        "Antebrazo" to antebrazo,
-                        "Bíceps" to biceps,
-                        "Muslos" to muslos,
-                        "Pantorrillas" to pantorrillas,
+                        "Cintura" to cintura, "Abdomen" to abdomen, "Glúteos" to gluteos,
+                        "Pecho" to pecho, "Hombros" to hombros, "Antebrazo" to antebrazo,
+                        "Bíceps" to biceps, "Muslos" to muslos, "Pantorrillas" to pantorrillas,
                         "Cuello" to cuello
                     )
                     items(fields.size) { index ->
                         val (label, value) = fields[index]
                         MeasurementField(
-                            label = label,
-                            value = value,
+                            label = label, value = value,
                             onValueChange = { newVal ->
                                 when (index) {
-                                    0 -> cintura = newVal
-                                    1 -> abdomen = newVal
-                                    2 -> gluteos = newVal
-                                    3 -> pecho = newVal
-                                    4 -> hombros = newVal
-                                    5 -> antebrazo = newVal
-                                    6 -> biceps = newVal
-                                    7 -> muslos = newVal
-                                    8 -> pantorrillas = newVal
-                                    9 -> cuello = newVal
+                                    0 -> cintura = newVal; 1 -> abdomen = newVal
+                                    2 -> gluteos = newVal; 3 -> pecho = newVal
+                                    4 -> hombros = newVal; 5 -> antebrazo = newVal
+                                    6 -> biceps = newVal; 7 -> muslos = newVal
+                                    8 -> pantorrillas = newVal; 9 -> cuello = newVal
                                 }
                             }
                         )
@@ -575,40 +619,25 @@ private fun EditMeasurementsDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(
-                        BodyMeasurements(
-                            cintura = cintura.toDoubleOrNull(),
-                            abdomen = abdomen.toDoubleOrNull(),
-                            gluteos = gluteos.toDoubleOrNull(),
-                            pecho = pecho.toDoubleOrNull(),
-                            hombros = hombros.toDoubleOrNull(),
-                            antebrazo = antebrazo.toDoubleOrNull(),
-                            biceps = biceps.toDoubleOrNull(),
-                            muslos = muslos.toDoubleOrNull(),
-                            pantorrillas = pantorrillas.toDoubleOrNull(),
-                            cuello = cuello.toDoubleOrNull()
-                        )
-                    )
+                    onSave(BodyMeasurements(
+                        cintura = cintura.toDoubleOrNull(), abdomen = abdomen.toDoubleOrNull(),
+                        gluteos = gluteos.toDoubleOrNull(), pecho = pecho.toDoubleOrNull(),
+                        hombros = hombros.toDoubleOrNull(), antebrazo = antebrazo.toDoubleOrNull(),
+                        biceps = biceps.toDoubleOrNull(), muslos = muslos.toDoubleOrNull(),
+                        pantorrillas = pantorrillas.toDoubleOrNull(), cuello = cuello.toDoubleOrNull()
+                    ))
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = LimeGreen)
-            ) {
-                Text("Guardar", color = Color.Black)
-            }
+            ) { Text("Guardar", color = Color.Black) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = TextGray)
-            }
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = TextGray) }
         }
     )
 }
 
 @Composable
-private fun MeasurementField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit
-) {
+private fun MeasurementField(label: String, value: String, onValueChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { newVal ->
@@ -628,9 +657,7 @@ private fun MeasurementField(
 @Composable
 private fun PRRow(label: String, value: Double?) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label, color = TextGray, fontSize = 14.sp)
@@ -662,61 +689,43 @@ private fun EditPersonalRecordsDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val fields = listOf(
-                    "Sentadillas" to sentadillas,
-                    "Peso Muerto" to pesoMuerto,
-                    "Press de Banca" to pressBanca,
-                    "Press Militar" to pressMilitar,
+                    "Sentadillas" to sentadillas, "Peso Muerto" to pesoMuerto,
+                    "Press de Banca" to pressBanca, "Press Militar" to pressMilitar,
                     "Dominadas" to dominadas
                 )
                 fields.forEachIndexed { index, (label, value) ->
-                    PRField(
-                        label = label,
-                        value = value,
-                        onValueChange = { newVal ->
-                            when (index) {
-                                0 -> sentadillas = newVal
-                                1 -> pesoMuerto = newVal
-                                2 -> pressBanca = newVal
-                                3 -> pressMilitar = newVal
-                                4 -> dominadas = newVal
-                            }
+                    PRField(label = label, value = value, onValueChange = { newVal ->
+                        when (index) {
+                            0 -> sentadillas = newVal; 1 -> pesoMuerto = newVal
+                            2 -> pressBanca = newVal; 3 -> pressMilitar = newVal
+                            4 -> dominadas = newVal
                         }
-                    )
+                    })
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(
-                        PersonalRecords(
-                            sentadillas = sentadillas.toDoubleOrNull(),
-                            pesoMuerto = pesoMuerto.toDoubleOrNull(),
-                            pressBanca = pressBanca.toDoubleOrNull(),
-                            pressMilitar = pressMilitar.toDoubleOrNull(),
-                            dominadas = dominadas.toDoubleOrNull()
-                        )
-                    )
+                    onSave(PersonalRecords(
+                        sentadillas = sentadillas.toDoubleOrNull(),
+                        pesoMuerto = pesoMuerto.toDoubleOrNull(),
+                        pressBanca = pressBanca.toDoubleOrNull(),
+                        pressMilitar = pressMilitar.toDoubleOrNull(),
+                        dominadas = dominadas.toDoubleOrNull()
+                    ))
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = LimeGreen)
-            ) {
-                Text("Guardar", color = Color.Black)
-            }
+            ) { Text("Guardar", color = Color.Black) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = TextGray)
-            }
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = TextGray) }
         }
     )
 }
 
 @Composable
-private fun PRField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit
-) {
+private fun PRField(label: String, value: String, onValueChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { newVal ->
@@ -731,6 +740,237 @@ private fun PRField(
         colors = profileFieldColors(),
         suffix = { Text("kg", color = TextGray, fontSize = 12.sp) }
     )
+}
+
+// --- PR Chart ---
+
+@Composable
+private fun PRChartDialog(
+    history: List<PRHistoryEntry>,
+    onDismiss: () -> Unit
+) {
+    val exercises = listOf(
+        "Sentadillas" to Color(0xFF4CAF50),
+        "Peso Muerto" to Color(0xFF2196F3),
+        "Press Banca" to Color(0xFFFF9800),
+        "Press Militar" to Color(0xFFE91E63),
+        "Dominadas" to Color(0xFF9C27B0)
+    )
+
+    var selectedExercises by remember {
+        mutableStateOf(setOf("Sentadillas", "Peso Muerto", "Press Banca", "Press Militar", "Dominadas"))
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = { Text("Progreso de Records", color = Color.White) },
+        text = {
+            Column {
+                // Exercise filter chips
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    exercises.forEach { (name, color) ->
+                        FilterChip(
+                            selected = name in selectedExercises,
+                            onClick = {
+                                selectedExercises = if (name in selectedExercises) {
+                                    selectedExercises - name
+                                } else {
+                                    selectedExercises + name
+                                }
+                            },
+                            label = { Text(name, fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = color.copy(alpha = 0.25f),
+                                selectedLabelColor = color
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Chart
+                if (history.size >= 2) {
+                    PRLineChart(
+                        history = history,
+                        selectedExercises = selectedExercises,
+                        exerciseColors = exercises.toMap(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                    )
+                } else {
+                    Text(
+                        "Se necesitan al menos 2 registros para mostrar el gráfico.",
+                        color = TextGray,
+                        fontSize = 13.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Legend
+                exercises.filter { it.first in selectedExercises }.forEach { (name, color) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        val lastValue = history.lastOrNull()?.let { entry ->
+                            when (name) {
+                                "Sentadillas" -> entry.sentadillas
+                                "Peso Muerto" -> entry.pesoMuerto
+                                "Press Banca" -> entry.pressBanca
+                                "Press Militar" -> entry.pressMilitar
+                                "Dominadas" -> entry.dominadas
+                                else -> null
+                            }
+                        }
+                        Text(
+                            "$name: ${lastValue?.let { "${it}kg" } ?: "—"}",
+                            color = Color.White,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cerrar", color = LimeGreen) }
+        },
+        dismissButton = {}
+    )
+}
+
+@Composable
+private fun PRLineChart(
+    history: List<PRHistoryEntry>,
+    selectedExercises: Set<String>,
+    exerciseColors: Map<String, Color>,
+    modifier: Modifier = Modifier
+) {
+    val dateFormat = SimpleDateFormat("dd/MM", Locale.getDefault())
+
+    // Extract data series
+    data class Series(val name: String, val color: Color, val values: List<Pair<Int, Double>>)
+
+    val allSeries = mutableListOf<Series>()
+    val extractors: List<Triple<String, Color, (PRHistoryEntry) -> Double?>> = listOf(
+        Triple("Sentadillas", exerciseColors["Sentadillas"] ?: LimeGreen) { it.sentadillas },
+        Triple("Peso Muerto", exerciseColors["Peso Muerto"] ?: LimeGreen) { it.pesoMuerto },
+        Triple("Press Banca", exerciseColors["Press Banca"] ?: LimeGreen) { it.pressBanca },
+        Triple("Press Militar", exerciseColors["Press Militar"] ?: LimeGreen) { it.pressMilitar },
+        Triple("Dominadas", exerciseColors["Dominadas"] ?: LimeGreen) { it.dominadas },
+    )
+
+    for ((name, color, extractor) in extractors) {
+        if (name !in selectedExercises) continue
+        val values = history.mapIndexedNotNull { index, entry ->
+            extractor(entry)?.let { index to it }
+        }
+        if (values.size >= 2) {
+            allSeries.add(Series(name, color, values))
+        }
+    }
+
+    // Find global min/max
+    val allValues = allSeries.flatMap { s -> s.values.map { it.second } }
+    if (allValues.isEmpty()) {
+        Text("No hay datos suficientes para los ejercicios seleccionados.", color = TextGray, fontSize = 13.sp)
+        return
+    }
+    val minVal = allValues.min()
+    val maxVal = allValues.max()
+    val range = if (maxVal - minVal < 1.0) 1.0 else maxVal - minVal
+    val totalPoints = history.size
+
+    Canvas(modifier = modifier) {
+        val chartLeft = 45f
+        val chartRight = size.width - 16f
+        val chartTop = 16f
+        val chartBottom = size.height - 30f
+        val chartWidth = chartRight - chartLeft
+        val chartHeight = chartBottom - chartTop
+
+        // Draw grid lines
+        val gridLines = 4
+        for (i in 0..gridLines) {
+            val y = chartTop + chartHeight * (1f - i.toFloat() / gridLines)
+            drawLine(
+                color = Color.White.copy(alpha = 0.1f),
+                start = Offset(chartLeft, y),
+                end = Offset(chartRight, y),
+                strokeWidth = 1f
+            )
+            // Y axis labels
+            val label = (minVal + range * i / gridLines).let { "%.0f".format(it) }
+            drawContext.canvas.nativeCanvas.drawText(
+                label,
+                4f,
+                y + 4f,
+                android.graphics.Paint().apply {
+                    this.color = android.graphics.Color.GRAY
+                    textSize = 24f
+                    isAntiAlias = true
+                }
+            )
+        }
+
+        // Draw X axis labels (dates)
+        val maxLabels = (chartWidth / 100f).toInt().coerceIn(2, totalPoints)
+        val step = if (totalPoints > maxLabels) totalPoints / maxLabels else 1
+        for (i in history.indices step step) {
+            val x = chartLeft + chartWidth * i / (totalPoints - 1).coerceAtLeast(1)
+            val dateStr = dateFormat.format(Date(history[i].date))
+            drawContext.canvas.nativeCanvas.drawText(
+                dateStr,
+                x - 20f,
+                size.height - 2f,
+                android.graphics.Paint().apply {
+                    this.color = android.graphics.Color.GRAY
+                    textSize = 22f
+                    isAntiAlias = true
+                }
+            )
+        }
+
+        // Draw lines for each series
+        for (series in allSeries) {
+            val path = Path()
+            var first = true
+            for ((index, value) in series.values) {
+                val x = chartLeft + chartWidth * index / (totalPoints - 1).coerceAtLeast(1)
+                val y = chartTop + chartHeight * (1f - ((value - minVal) / range).toFloat())
+                if (first) {
+                    path.moveTo(x, y)
+                    first = false
+                } else {
+                    path.lineTo(x, y)
+                }
+            }
+            drawPath(
+                path = path,
+                color = series.color,
+                style = Stroke(width = 3f, cap = StrokeCap.Round)
+            )
+            // Draw dots
+            for ((index, value) in series.values) {
+                val x = chartLeft + chartWidth * index / (totalPoints - 1).coerceAtLeast(1)
+                val y = chartTop + chartHeight * (1f - ((value - minVal) / range).toFloat())
+                drawCircle(color = series.color, radius = 5f, center = Offset(x, y))
+            }
+        }
+    }
 }
 
 @Composable

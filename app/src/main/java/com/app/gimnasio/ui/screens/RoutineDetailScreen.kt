@@ -13,8 +13,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -24,11 +27,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -55,6 +62,30 @@ fun RoutineDetailScreen(
     onEdit: (Long) -> Unit = {}
 ) {
     val routine by viewModel.selectedRoutine.collectAsState()
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            containerColor = DarkCard,
+            title = { Text("Eliminar rutina", color = Color.White) },
+            text = { Text("¿Estás seguro de que querés eliminar \"${routine?.name}\"? Esta acción no se puede deshacer.", color = TextGray) },
+            confirmButton = {
+                TextButton(onClick = {
+                    routine?.let { viewModel.deleteRoutine(it.id) }
+                    showDeleteDialog = false
+                    onBack()
+                }) {
+                    Text("Eliminar", color = Color(0xFFFF6B6B))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancelar", color = LimeGreen)
+                }
+            }
+        )
+    }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -70,6 +101,9 @@ fun RoutineDetailScreen(
                     routine?.let { r ->
                         IconButton(onClick = { onEdit(r.id) }) {
                             Icon(Icons.Default.Edit, contentDescription = "Editar", tint = LimeGreen)
+                        }
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF6B6B))
                         }
                     }
                 },
@@ -113,7 +147,11 @@ fun RoutineDetailScreen(
                         )
                     }
                     itemsIndexed(warmupExercises) { index, exercise ->
-                        WarmupDetailItem(index = index + 1, exercise = exercise)
+                        if (exercise.isCircuit) {
+                            CircuitDetailItem(index = index + 1, exercise = exercise)
+                        } else {
+                            WarmupDetailItem(index = index + 1, exercise = exercise)
+                        }
                     }
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
@@ -128,7 +166,11 @@ fun RoutineDetailScreen(
                         )
                     }
                     itemsIndexed(strengthExercises) { index, exercise ->
-                        StrengthDetailItem(index = index + 1, exercise = exercise)
+                        if (exercise.isCircuit) {
+                            CircuitDetailItem(index = index + 1, exercise = exercise)
+                        } else {
+                            StrengthDetailItem(index = index + 1, exercise = exercise)
+                        }
                     }
                 }
 
@@ -219,14 +261,127 @@ private fun StrengthDetailItem(index: Int, exercise: Exercise) {
                 Text(exercise.name, color = Color.White, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                InfoChip("Series", "${exercise.sets ?: "-"}")
-                InfoChip("Reps", "${exercise.strengthReps ?: "-"}")
-                InfoChip("Peso", if (exercise.weightKg != null && exercise.weightKg > 0) "${exercise.weightKg} kg" else "-")
-                InfoChip("Desc.", if (exercise.restSeconds != null) "${exercise.restSeconds}s" else "-")
+
+            val isCustom = exercise.weightPerSet != null || exercise.repsPerSet != null
+            if (isCustom) {
+                // Show custom sets with reps + weight per set
+                val sets = exercise.sets ?: 0
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    InfoChip("Series", "$sets")
+                    InfoChip("Desc.", if (exercise.restSeconds != null) "${exercise.restSeconds}s" else "-")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Detalle por serie:", color = TextGray, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    for (i in 0 until sets) {
+                        val r = exercise.repsPerSet?.getOrNull(i) ?: exercise.strengthReps ?: 0
+                        val w = exercise.weightPerSet?.getOrNull(i) ?: exercise.weightKg ?: 0.0
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "${r}r",
+                                color = LimeGreen,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "${w}kg",
+                                color = Color.White,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                "S${i + 1}",
+                                color = TextGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    InfoChip("Series", "${exercise.sets ?: "-"}")
+                    InfoChip("Reps", "${exercise.strengthReps ?: "-"}")
+                    InfoChip("Peso", if (exercise.weightKg != null && exercise.weightKg > 0) "${exercise.weightKg} kg" else "-")
+                    InfoChip("Desc.", if (exercise.restSeconds != null) "${exercise.restSeconds}s" else "-")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CircuitDetailItem(index: Int, exercise: Exercise) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "$index.",
+                    color = LimeGreen,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Spacer(modifier = Modifier.padding(horizontal = 6.dp))
+                Icon(
+                    Icons.Default.Loop,
+                    contentDescription = null,
+                    tint = Color(0xFFFF9800),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "Circuito · ${exercise.circuitRounds} rondas",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Show circuit exercises with arrows
+            Text(
+                exercise.circuitExercises.joinToString(" → "),
+                color = Color(0xFFFF9800),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Show exercise-specific info
+            if (exercise.phase == ExercisePhase.STRENGTH) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    InfoChip("Reps", "${exercise.strengthReps ?: "-"}")
+                    InfoChip("Rondas", "${exercise.circuitRounds ?: "-"}")
+                    InfoChip("Desc.", if (exercise.restSeconds != null) "${exercise.restSeconds}s" else "-")
+                }
+            } else {
+                val detail = if (exercise.durationSeconds != null) {
+                    "${exercise.durationSeconds}s por ejercicio"
+                } else if (exercise.reps != null) {
+                    "${exercise.reps} reps por ejercicio"
+                } else ""
+                if (detail.isNotBlank()) {
+                    Text(detail, color = TextGray, fontSize = 13.sp)
+                }
             }
         }
     }

@@ -10,6 +10,8 @@ import com.app.gimnasio.data.model.ExercisePhase
 import com.app.gimnasio.data.model.MuscleGroup
 import com.app.gimnasio.data.model.Routine
 import com.app.gimnasio.data.model.BodyMeasurements
+import com.app.gimnasio.data.model.MeasurementsHistoryEntry
+import com.app.gimnasio.data.model.PRHistoryEntry
 import com.app.gimnasio.data.model.PersonalRecords
 import com.app.gimnasio.data.model.UserProfile
 import com.app.gimnasio.data.model.WorkoutLog
@@ -42,6 +44,11 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                 strength_reps INTEGER,
                 rest_seconds INTEGER,
                 weight_kg REAL,
+                is_circuit INTEGER NOT NULL DEFAULT 0,
+                circuit_exercises TEXT,
+                circuit_rounds INTEGER,
+                weight_per_set TEXT,
+                reps_per_set TEXT,
                 FOREIGN KEY (routine_id) REFERENCES routines(id) ON DELETE CASCADE
             )
         """)
@@ -94,7 +101,8 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                 biceps REAL,
                 muslos REAL,
                 pantorrillas REAL,
-                cuello REAL
+                cuello REAL,
+                updated_at INTEGER
             )
         """)
 
@@ -115,9 +123,116 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                 peso_muerto REAL,
                 press_banca REAL,
                 press_militar REAL,
-                dominadas REAL
+                dominadas REAL,
+                updated_at INTEGER
             )
         """)
+
+        db.execSQL("""
+            CREATE TABLE body_measurements_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date INTEGER NOT NULL,
+                cintura REAL, abdomen REAL, gluteos REAL, pecho REAL, hombros REAL,
+                antebrazo REAL, biceps REAL, muslos REAL, pantorrillas REAL, cuello REAL
+            )
+        """)
+
+        db.execSQL("""
+            CREATE TABLE personal_records_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date INTEGER NOT NULL,
+                sentadillas REAL, peso_muerto REAL, press_banca REAL,
+                press_militar REAL, dominadas REAL
+            )
+        """)
+
+        // Seed exercise gallery
+        seedExerciseGallery(db)
+    }
+
+    private fun seedExerciseGallery(db: SQLiteDatabase) {
+        // Basic seed without images (called from onCreate/onUpgrade).
+        // Images are copied later by seedIfNeeded() from Application.
+        val cursor = db.rawQuery("SELECT COUNT(*) FROM exercise_gallery", null)
+        val count = cursor.use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        if (count > 0) return
+
+        ExerciseSeedData.getAll().forEach { ex ->
+            db.insert("exercise_gallery", null, ContentValues().apply {
+                put("name", ex.name)
+                put("description", ex.description)
+                put("muscle_group", ex.muscleGroup.name)
+            })
+        }
+    }
+
+    fun seedIfNeeded(context: Context) {
+        val db = writableDatabase
+        val cursor = db.rawQuery("SELECT COUNT(*) FROM exercise_gallery", null)
+        val count = cursor.use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        if (count == 0) {
+            seedExerciseGalleryWithContext(db, context)
+            return
+        }
+        // If exercises exist but images not yet copied, copy them
+        val noImgCursor = db.rawQuery(
+            "SELECT COUNT(*) FROM exercise_gallery WHERE image_path IS NULL", null
+        )
+        val noImgCount = noImgCursor.use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        if (noImgCount > 0) {
+            copyAssetImages(db, context)
+        }
+    }
+
+    private fun copyAssetImages(db: SQLiteDatabase, context: Context) {
+        val imgDir = java.io.File(context.filesDir, "exercise_images")
+        if (!imgDir.exists()) imgDir.mkdirs()
+
+        val seedMap = ExerciseSeedData.getAll()
+            .filter { it.assetImage != null }
+            .associateBy({ it.name }, { it.assetImage!! })
+
+        seedMap.forEach { (name, assetName) ->
+            try {
+                val destFile = java.io.File(imgDir, "${assetName}.jpg")
+                if (!destFile.exists()) {
+                    context.assets.open("exercise_images/${assetName}.jpg").use { input ->
+                        destFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+                db.update("exercise_gallery", ContentValues().apply {
+                    put("image_path", destFile.absolutePath)
+                }, "name = ? AND image_path IS NULL", arrayOf(name))
+            } catch (_: Exception) { }
+        }
+    }
+
+    private fun seedExerciseGalleryWithContext(db: SQLiteDatabase, context: Context) {
+        val imgDir = java.io.File(context.filesDir, "exercise_images")
+        if (!imgDir.exists()) imgDir.mkdirs()
+
+        ExerciseSeedData.getAll().forEach { ex ->
+            var imagePath: String? = null
+            if (ex.assetImage != null) {
+                try {
+                    val assetFile = "exercise_images/${ex.assetImage}.jpg"
+                    val destFile = java.io.File(imgDir, "${ex.assetImage}.jpg")
+                    if (!destFile.exists()) {
+                        context.assets.open(assetFile).use { input ->
+                            destFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                    }
+                    imagePath = destFile.absolutePath
+                } catch (_: Exception) { }
+            }
+
+            db.insert("exercise_gallery", null, ContentValues().apply {
+                put("name", ex.name)
+                put("description", ex.description)
+                put("muscle_group", ex.muscleGroup.name)
+                put("image_path", imagePath)
+            })
+        }
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -207,6 +322,36 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                 db.execSQL("ALTER TABLE routines ADD COLUMN image_path TEXT")
             } catch (_: Exception) { }
         }
+        if (oldVersion < 9) {
+            try { db.execSQL("ALTER TABLE routine_exercises ADD COLUMN is_circuit INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) { }
+            try { db.execSQL("ALTER TABLE routine_exercises ADD COLUMN circuit_exercises TEXT") } catch (_: Exception) { }
+            try { db.execSQL("ALTER TABLE routine_exercises ADD COLUMN circuit_rounds INTEGER") } catch (_: Exception) { }
+            try { db.execSQL("ALTER TABLE routine_exercises ADD COLUMN weight_per_set TEXT") } catch (_: Exception) { }
+            seedExerciseGallery(db)
+        }
+        if (oldVersion < 10) {
+            try { db.execSQL("ALTER TABLE routine_exercises ADD COLUMN reps_per_set TEXT") } catch (_: Exception) { }
+        }
+        if (oldVersion < 11) {
+            try { db.execSQL("ALTER TABLE body_measurements ADD COLUMN updated_at INTEGER") } catch (_: Exception) { }
+            try { db.execSQL("ALTER TABLE personal_records ADD COLUMN updated_at INTEGER") } catch (_: Exception) { }
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS body_measurements_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date INTEGER NOT NULL,
+                    cintura REAL, abdomen REAL, gluteos REAL, pecho REAL, hombros REAL,
+                    antebrazo REAL, biceps REAL, muslos REAL, pantorrillas REAL, cuello REAL
+                )
+            """)
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS personal_records_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date INTEGER NOT NULL,
+                    sentadillas REAL, peso_muerto REAL, press_banca REAL,
+                    press_militar REAL, dominadas REAL
+                )
+            """)
+        }
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -226,21 +371,30 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
         })
 
         exercises.forEachIndexed { index, exercise ->
-            db.insert("routine_exercises", null, ContentValues().apply {
-                put("routine_id", routineId)
-                put("name", exercise.name)
-                put("order_index", index)
-                put("phase", exercise.phase.name)
-                put("duration_seconds", exercise.durationSeconds)
-                put("reps", exercise.reps)
-                put("sets", exercise.sets)
-                put("strength_reps", exercise.strengthReps)
-                put("rest_seconds", exercise.restSeconds)
-                put("weight_kg", exercise.weightKg)
-            })
+            db.insert("routine_exercises", null, exerciseToContentValues(routineId, index, exercise))
         }
 
         return routineId
+    }
+
+    private fun exerciseToContentValues(routineId: Long, index: Int, exercise: Exercise): ContentValues {
+        return ContentValues().apply {
+            put("routine_id", routineId)
+            put("name", exercise.name)
+            put("order_index", index)
+            put("phase", exercise.phase.name)
+            put("duration_seconds", exercise.durationSeconds)
+            put("reps", exercise.reps)
+            put("sets", exercise.sets)
+            put("strength_reps", exercise.strengthReps)
+            put("rest_seconds", exercise.restSeconds)
+            put("weight_kg", exercise.weightKg)
+            put("is_circuit", if (exercise.isCircuit) 1 else 0)
+            put("circuit_exercises", if (exercise.circuitExercises.isNotEmpty()) exercise.circuitExercises.joinToString("|") else null)
+            put("circuit_rounds", exercise.circuitRounds)
+            put("weight_per_set", exercise.weightPerSet?.joinToString(","))
+            put("reps_per_set", exercise.repsPerSet?.joinToString(","))
+        }
     }
 
     fun getAllRoutines(): List<Routine> {
@@ -308,18 +462,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
             db.delete("routine_exercises", "routine_id = ?", arrayOf(routineId.toString()))
 
             exercises.forEachIndexed { index, exercise ->
-                db.insert("routine_exercises", null, ContentValues().apply {
-                    put("routine_id", routineId)
-                    put("name", exercise.name)
-                    put("order_index", index)
-                    put("phase", exercise.phase.name)
-                    put("duration_seconds", exercise.durationSeconds)
-                    put("reps", exercise.reps)
-                    put("sets", exercise.sets)
-                    put("strength_reps", exercise.strengthReps)
-                    put("rest_seconds", exercise.restSeconds)
-                    put("weight_kg", exercise.weightKg)
-                })
+                db.insert("routine_exercises", null, exerciseToContentValues(routineId, index, exercise))
             }
             db.setTransactionSuccessful()
         } finally {
@@ -332,7 +475,9 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
         val exercises = mutableListOf<Exercise>()
         val cursor = db.rawQuery(
             """SELECT id, name, order_index, phase, duration_seconds, reps,
-                      sets, strength_reps, rest_seconds, weight_kg
+                      sets, strength_reps, rest_seconds, weight_kg,
+                      is_circuit, circuit_exercises, circuit_rounds, weight_per_set,
+                      reps_per_set
                FROM routine_exercises
                WHERE routine_id = ?
                ORDER BY order_index""",
@@ -340,6 +485,9 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
         )
         cursor.use {
             while (it.moveToNext()) {
+                val circuitExStr = if (it.isNull(11)) null else it.getString(11)
+                val weightPerSetStr = if (it.isNull(13)) null else it.getString(13)
+                val repsPerSetStr = if (it.isNull(14)) null else it.getString(14)
                 exercises.add(
                     Exercise(
                         id = it.getLong(0),
@@ -350,7 +498,12 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                         sets = if (it.isNull(6)) null else it.getInt(6),
                         strengthReps = if (it.isNull(7)) null else it.getInt(7),
                         restSeconds = if (it.isNull(8)) null else it.getInt(8),
-                        weightKg = if (it.isNull(9)) null else it.getDouble(9)
+                        weightKg = if (it.isNull(9)) null else it.getDouble(9),
+                        isCircuit = it.getInt(10) == 1,
+                        circuitExercises = circuitExStr?.split("|")?.filter { s -> s.isNotBlank() } ?: emptyList(),
+                        circuitRounds = if (it.isNull(12)) null else it.getInt(12),
+                        weightPerSet = weightPerSetStr?.split(",")?.mapNotNull { s -> s.toDoubleOrNull() },
+                        repsPerSet = repsPerSetStr?.split(",")?.mapNotNull { s -> s.toIntOrNull() }
                     )
                 )
             }
@@ -566,7 +719,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
     fun getBodyMeasurements(): BodyMeasurements? {
         val db = readableDatabase
         val cursor = db.rawQuery(
-            "SELECT id, cintura, abdomen, gluteos, pecho, hombros, antebrazo, biceps, muslos, pantorrillas, cuello FROM body_measurements WHERE id = 1",
+            "SELECT id, cintura, abdomen, gluteos, pecho, hombros, antebrazo, biceps, muslos, pantorrillas, cuello, updated_at FROM body_measurements WHERE id = 1",
             null
         )
         cursor.use {
@@ -582,7 +735,8 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                     biceps = if (it.isNull(7)) null else it.getDouble(7),
                     muslos = if (it.isNull(8)) null else it.getDouble(8),
                     pantorrillas = if (it.isNull(9)) null else it.getDouble(9),
-                    cuello = if (it.isNull(10)) null else it.getDouble(10)
+                    cuello = if (it.isNull(10)) null else it.getDouble(10),
+                    updatedAt = if (it.isNull(11)) null else it.getLong(11)
                 )
             }
         }
@@ -591,6 +745,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
 
     fun saveBodyMeasurements(m: BodyMeasurements) {
         val db = writableDatabase
+        val now = System.currentTimeMillis()
         val values = ContentValues().apply {
             put("id", 1)
             put("cintura", m.cintura)
@@ -603,11 +758,26 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
             put("muslos", m.muslos)
             put("pantorrillas", m.pantorrillas)
             put("cuello", m.cuello)
+            put("updated_at", now)
         }
         val updated = db.update("body_measurements", values, "id = 1", null)
         if (updated == 0) {
             db.insert("body_measurements", null, values)
         }
+        // Save to history
+        db.insert("body_measurements_history", null, ContentValues().apply {
+            put("date", now)
+            put("cintura", m.cintura)
+            put("abdomen", m.abdomen)
+            put("gluteos", m.gluteos)
+            put("pecho", m.pecho)
+            put("hombros", m.hombros)
+            put("antebrazo", m.antebrazo)
+            put("biceps", m.biceps)
+            put("muslos", m.muslos)
+            put("pantorrillas", m.pantorrillas)
+            put("cuello", m.cuello)
+        })
     }
 
     // --- Personal Records ---
@@ -615,7 +785,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
     fun getPersonalRecords(): PersonalRecords? {
         val db = readableDatabase
         val cursor = db.rawQuery(
-            "SELECT id, sentadillas, peso_muerto, press_banca, press_militar, dominadas FROM personal_records WHERE id = 1",
+            "SELECT id, sentadillas, peso_muerto, press_banca, press_militar, dominadas, updated_at FROM personal_records WHERE id = 1",
             null
         )
         cursor.use {
@@ -626,7 +796,8 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                     pesoMuerto = if (it.isNull(2)) null else it.getDouble(2),
                     pressBanca = if (it.isNull(3)) null else it.getDouble(3),
                     pressMilitar = if (it.isNull(4)) null else it.getDouble(4),
-                    dominadas = if (it.isNull(5)) null else it.getDouble(5)
+                    dominadas = if (it.isNull(5)) null else it.getDouble(5),
+                    updatedAt = if (it.isNull(6)) null else it.getLong(6)
                 )
             }
         }
@@ -635,6 +806,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
 
     fun savePersonalRecords(pr: PersonalRecords) {
         val db = writableDatabase
+        val now = System.currentTimeMillis()
         val values = ContentValues().apply {
             put("id", 1)
             put("sentadillas", pr.sentadillas)
@@ -642,11 +814,44 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
             put("press_banca", pr.pressBanca)
             put("press_militar", pr.pressMilitar)
             put("dominadas", pr.dominadas)
+            put("updated_at", now)
         }
         val updated = db.update("personal_records", values, "id = 1", null)
         if (updated == 0) {
             db.insert("personal_records", null, values)
         }
+        // Save to history
+        db.insert("personal_records_history", null, ContentValues().apply {
+            put("date", now)
+            put("sentadillas", pr.sentadillas)
+            put("peso_muerto", pr.pesoMuerto)
+            put("press_banca", pr.pressBanca)
+            put("press_militar", pr.pressMilitar)
+            put("dominadas", pr.dominadas)
+        })
+    }
+
+    fun getPRHistory(): List<PRHistoryEntry> {
+        val db = readableDatabase
+        val list = mutableListOf<PRHistoryEntry>()
+        val cursor = db.rawQuery(
+            "SELECT id, date, sentadillas, peso_muerto, press_banca, press_militar, dominadas FROM personal_records_history ORDER BY date ASC",
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(PRHistoryEntry(
+                    id = it.getLong(0),
+                    date = it.getLong(1),
+                    sentadillas = if (it.isNull(2)) null else it.getDouble(2),
+                    pesoMuerto = if (it.isNull(3)) null else it.getDouble(3),
+                    pressBanca = if (it.isNull(4)) null else it.getDouble(4),
+                    pressMilitar = if (it.isNull(5)) null else it.getDouble(5),
+                    dominadas = if (it.isNull(6)) null else it.getDouble(6)
+                ))
+            }
+        }
+        return list
     }
 
     // --- Workout Plan ---
@@ -700,7 +905,7 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
 
     companion object {
         const val DATABASE_NAME = "gimnasio.db"
-        const val DATABASE_VERSION = 8
+        const val DATABASE_VERSION = 11
 
         @Volatile
         private var INSTANCE: GimnasioDatabase? = null

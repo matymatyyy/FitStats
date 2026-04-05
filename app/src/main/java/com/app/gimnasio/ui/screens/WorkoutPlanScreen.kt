@@ -25,10 +25,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,8 +52,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.app.gimnasio.data.model.ExercisePhase
 import com.app.gimnasio.data.model.Routine
 import com.app.gimnasio.data.model.WorkoutPlanDay
+import androidx.compose.ui.window.Dialog
 import com.app.gimnasio.ui.theme.DarkBackground
 import com.app.gimnasio.ui.theme.DarkCard
 import com.app.gimnasio.ui.theme.DarkSurface
@@ -345,8 +347,21 @@ private fun DayRoutineAssignment(
     routines: List<Routine>,
     onRoutineSelected: (Long) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
     val selectedRoutine = routines.find { it.id == selectedRoutineId }
+
+    if (showDialog) {
+        RoutinePickerDialog(
+            dayName = dayName,
+            routines = routines,
+            selectedRoutineId = selectedRoutineId,
+            onRoutineSelected = { routineId ->
+                onRoutineSelected(routineId)
+                showDialog = false
+            },
+            onDismiss = { showDialog = false }
+        )
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -356,7 +371,7 @@ private fun DayRoutineAssignment(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = true }
+                .clickable { showDialog = true }
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -385,11 +400,26 @@ private fun DayRoutineAssignment(
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
                 )
-                Text(
-                    text = selectedRoutine?.name ?: "Tocá para asignar rutina",
-                    color = if (selectedRoutine != null) LimeGreen else TextGray,
-                    fontSize = 13.sp
-                )
+                if (selectedRoutine != null) {
+                    Text(
+                        text = selectedRoutine.name,
+                        color = LimeGreen,
+                        fontSize = 13.sp
+                    )
+                    val warmup = selectedRoutine.exercises.count { it.phase == ExercisePhase.WARMUP }
+                    val strength = selectedRoutine.exercises.count { it.phase == ExercisePhase.STRENGTH }
+                    Text(
+                        text = "$warmup calentamiento · $strength fuerza",
+                        color = TextGray,
+                        fontSize = 11.sp
+                    )
+                } else {
+                    Text(
+                        text = "Tocá para asignar rutina",
+                        color = TextGray,
+                        fontSize = 13.sp
+                    )
+                }
             }
 
             Icon(
@@ -399,26 +429,117 @@ private fun DayRoutineAssignment(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(DarkSurface)
+@Composable
+private fun RoutinePickerDialog(
+    dayName: String,
+    routines: List<Routine>,
+    selectedRoutineId: Long?,
+    onRoutineSelected: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp)
         ) {
-            routines.forEach { routine ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = routine.name,
-                            color = Color.White,
-                            fontSize = 14.sp
-                        )
-                    },
-                    onClick = {
-                        onRoutineSelected(routine.id)
-                        expanded = false
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Rutina para $dayName",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = TextGray, modifier = Modifier.size(20.dp))
                     }
-                )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LazyColumn(
+                    modifier = Modifier.height((routines.size.coerceAtMost(5) * 100).dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(routines) { routine ->
+                        val isSelected = routine.id == selectedRoutineId
+                        val warmup = routine.exercises.count { it.phase == ExercisePhase.WARMUP }
+                        val strength = routine.exercises.count { it.phase == ExercisePhase.STRENGTH }
+                        val total = routine.exercises.size
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onRoutineSelected(routine.id) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) LimeGreen.copy(alpha = 0.15f) else DarkCard
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = routine.name,
+                                        color = if (isSelected) LimeGreen else Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp
+                                    )
+                                    if (routine.description.isNotBlank()) {
+                                        Text(
+                                            text = routine.description,
+                                            color = TextGray,
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Text(
+                                            text = "$total ejercicios",
+                                            color = TextGray,
+                                            fontSize = 12.sp
+                                        )
+                                        if (warmup > 0) {
+                                            Text(
+                                                text = "$warmup calent.",
+                                                color = Color(0xFF4FC3F7),
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                        if (strength > 0) {
+                                            Text(
+                                                text = "$strength fuerza",
+                                                color = Color(0xFFFF9800),
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    }
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = LimeGreen,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

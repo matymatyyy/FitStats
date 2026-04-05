@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Button
@@ -194,107 +195,216 @@ fun ActiveWorkoutScreen(
 
             if (!isResting) {
                 currentStep?.let { step ->
-                    // Exercise phase badge
-                    val phaseText = if (step.exercise.phase == ExercisePhase.WARMUP)
-                        "CALENTAMIENTO" else "FUERZA"
-                    val phaseColor = if (step.exercise.phase == ExercisePhase.WARMUP)
-                        Color(0xFFFF9800) else LimeGreen
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(phaseColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = phaseText,
-                            color = phaseColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Exercise icon
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape)
-                            .background(DarkCard),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.FitnessCenter,
-                            contentDescription = null,
-                            tint = LimeGreen,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Exercise name
-                    Text(
-                        text = step.exercise.name,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 26.sp,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Set info
-                    if (step.exercise.phase == ExercisePhase.STRENGTH) {
-                        Text(
-                            text = "Serie ${step.currentSet} de ${step.totalSets}",
-                            color = LimeGreen,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        // Exercise details card
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = DarkCard),
-                            shape = RoundedCornerShape(16.dp)
+                    if (step.isCircuitStep) {
+                        // Circuit step display
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color(0xFFFF9800).copy(alpha = 0.15f))
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp),
-                                horizontalArrangement = Arrangement.SpaceEvenly
-                            ) {
-                                DetailColumn(
-                                    label = "Repeticiones",
-                                    value = "${step.exercise.strengthReps ?: "-"}"
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Loop,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF9800),
+                                    modifier = Modifier.size(16.dp)
                                 )
-                                DetailColumn(
-                                    label = "Peso",
-                                    value = if (step.exercise.weightKg != null && step.exercise.weightKg > 0)
-                                        "${step.exercise.weightKg} kg" else "-"
-                                )
-                                DetailColumn(
-                                    label = "Descanso",
-                                    value = if (step.exercise.restSeconds != null)
-                                        "${step.exercise.restSeconds}s" else "-"
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "CIRCUITO · Ronda ${step.circuitRound}/${step.circuitTotalRounds}",
+                                    color = Color(0xFFFF9800),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
                                 )
                             }
                         }
-                    } else {
-                        // Warmup details
-                        val detail = if (step.exercise.durationSeconds != null) {
-                            "${step.exercise.durationSeconds} segundos"
-                        } else {
-                            "${step.exercise.reps ?: "-"} repeticiones"
+
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        // Exercise icon
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .background(DarkCard),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Loop,
+                                contentDescription = null,
+                                tint = Color(0xFFFF9800),
+                                modifier = Modifier.size(40.dp)
+                            )
                         }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Exercise name
                         Text(
-                            text = detail,
-                            color = TextGray,
-                            fontSize = 18.sp
+                            text = step.circuitExerciseName ?: "",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 26.sp,
+                            textAlign = TextAlign.Center
                         )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Circuit details
+                        if (step.exercise.phase == ExercisePhase.STRENGTH) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(20.dp),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    DetailColumn(
+                                        label = "Repeticiones",
+                                        value = "${step.exercise.strengthReps ?: "-"}"
+                                    )
+                                    DetailColumn(
+                                        label = "Ronda",
+                                        value = "${step.circuitRound}/${step.circuitTotalRounds}"
+                                    )
+                                }
+                            }
+                        } else {
+                            val detail = if (step.exercise.durationSeconds != null) {
+                                "${step.exercise.durationSeconds} segundos"
+                            } else if (step.exercise.reps != null) {
+                                "${step.exercise.reps} repeticiones"
+                            } else ""
+                            if (detail.isNotBlank()) {
+                                Text(
+                                    text = detail,
+                                    color = TextGray,
+                                    fontSize = 18.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Show sequence
+                        Text(
+                            text = step.exercise.circuitExercises.joinToString(" → ") {
+                                if (it == step.circuitExerciseName) "[$it]" else it
+                            },
+                            color = TextGray,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    } else {
+                        // Regular exercise display
+                        val phaseText = if (step.exercise.phase == ExercisePhase.WARMUP)
+                            "CALENTAMIENTO" else "FUERZA"
+                        val phaseColor = if (step.exercise.phase == ExercisePhase.WARMUP)
+                            Color(0xFFFF9800) else LimeGreen
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(phaseColor.copy(alpha = 0.15f))
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = phaseText,
+                                color = phaseColor,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        // Exercise icon
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .background(DarkCard),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.FitnessCenter,
+                                contentDescription = null,
+                                tint = LimeGreen,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Exercise name
+                        Text(
+                            text = step.exercise.name,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 26.sp,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Set info
+                        if (step.exercise.phase == ExercisePhase.STRENGTH) {
+                            Text(
+                                text = "Serie ${step.currentSet} de ${step.totalSets}",
+                                color = LimeGreen,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // Exercise details card
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(20.dp),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    val displayReps = step.repsForThisSet ?: step.exercise.strengthReps
+                                    DetailColumn(
+                                        label = "Repeticiones",
+                                        value = "${displayReps ?: "-"}"
+                                    )
+                                    val displayWeight = step.weightForThisSet
+                                    DetailColumn(
+                                        label = "Peso",
+                                        value = if (displayWeight != null && displayWeight > 0)
+                                            "${displayWeight} kg" else "-"
+                                    )
+                                    DetailColumn(
+                                        label = "Descanso",
+                                        value = if (step.exercise.restSeconds != null)
+                                            "${step.exercise.restSeconds}s" else "-"
+                                    )
+                                }
+                            }
+                        } else {
+                            // Warmup details
+                            val detail = if (step.exercise.durationSeconds != null) {
+                                "${step.exercise.durationSeconds} segundos"
+                            } else {
+                                "${step.exercise.reps ?: "-"} repeticiones"
+                            }
+                            Text(
+                                text = detail,
+                                color = TextGray,
+                                fontSize = 18.sp
+                            )
+                        }
                     }
                 }
             }

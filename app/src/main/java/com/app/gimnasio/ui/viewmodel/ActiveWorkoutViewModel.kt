@@ -24,7 +24,15 @@ import java.util.Calendar
 data class WorkoutStep(
     val exercise: Exercise,
     val currentSet: Int, // 1-based
-    val totalSets: Int
+    val totalSets: Int,
+    // Circuit info
+    val isCircuitStep: Boolean = false,
+    val circuitExerciseName: String? = null,
+    val circuitRound: Int = 0, // 1-based
+    val circuitTotalRounds: Int = 0,
+    // Per-set customization
+    val weightForThisSet: Double? = null,
+    val repsForThisSet: Int? = null
 )
 
 data class WorkoutResult(
@@ -111,14 +119,47 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     private fun buildSteps(exercises: List<Exercise>): List<WorkoutStep> {
         val steps = mutableListOf<WorkoutStep>()
         for (exercise in exercises) {
-            when (exercise.phase) {
-                ExercisePhase.WARMUP -> {
-                    steps.add(WorkoutStep(exercise, currentSet = 1, totalSets = 1))
+            if (exercise.isCircuit) {
+                val rounds = exercise.circuitRounds ?: 1
+                val circuitExNames = exercise.circuitExercises
+                // Each round goes through all exercises in the circuit
+                for (round in 1..rounds) {
+                    for (exName in circuitExNames) {
+                        steps.add(
+                            WorkoutStep(
+                                exercise = exercise,
+                                currentSet = round,
+                                totalSets = rounds,
+                                isCircuitStep = true,
+                                circuitExerciseName = exName,
+                                circuitRound = round,
+                                circuitTotalRounds = rounds
+                            )
+                        )
+                    }
                 }
-                ExercisePhase.STRENGTH -> {
-                    val sets = exercise.sets ?: 1
-                    for (s in 1..sets) {
-                        steps.add(WorkoutStep(exercise, currentSet = s, totalSets = sets))
+            } else {
+                when (exercise.phase) {
+                    ExercisePhase.WARMUP -> {
+                        steps.add(WorkoutStep(exercise, currentSet = 1, totalSets = 1))
+                    }
+                    ExercisePhase.STRENGTH -> {
+                        val sets = exercise.sets ?: 1
+                        for (s in 1..sets) {
+                            val weightForSet = exercise.weightPerSet?.getOrNull(s - 1)
+                                ?: exercise.weightKg
+                            val repsForSet = exercise.repsPerSet?.getOrNull(s - 1)
+                                ?: exercise.strengthReps
+                            steps.add(
+                                WorkoutStep(
+                                    exercise = exercise,
+                                    currentSet = s,
+                                    totalSets = sets,
+                                    weightForThisSet = weightForSet,
+                                    repsForThisSet = repsForSet
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -148,14 +189,23 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         val currentStep = steps[_currentStepIndex.value]
         val nextStep = steps[nextIndex]
 
-        // If we just finished a strength set and there's a rest time, start rest
-        if (currentStep.exercise.phase == ExercisePhase.STRENGTH &&
-            currentStep.exercise.restSeconds != null &&
-            currentStep.exercise.restSeconds > 0 &&
-            // Only rest between sets of same exercise or before next exercise
-            nextIndex < steps.size
-        ) {
-            startRestTimer(currentStep.exercise.restSeconds)
+        // Rest logic: rest after strength sets and between circuit rounds
+        val shouldRest = if (currentStep.isCircuitStep) {
+            // Rest between circuit rounds (after last exercise in a round, before next round)
+            currentStep.exercise.phase == ExercisePhase.STRENGTH &&
+                    currentStep.exercise.restSeconds != null &&
+                    currentStep.exercise.restSeconds > 0 &&
+                    nextStep.isCircuitStep &&
+                    nextStep.circuitRound != currentStep.circuitRound
+        } else {
+            currentStep.exercise.phase == ExercisePhase.STRENGTH &&
+                    currentStep.exercise.restSeconds != null &&
+                    currentStep.exercise.restSeconds > 0 &&
+                    nextIndex < steps.size
+        }
+
+        if (shouldRest) {
+            startRestTimer(currentStep.exercise.restSeconds!!)
         }
 
         _currentStepIndex.value = nextIndex
@@ -189,7 +239,9 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
 
         val r = _routine.value ?: return
         val elapsed = _elapsedSeconds.value
-        val exerciseNames = r.exercises.map { it.name }.distinct()
+        val exerciseNames = r.exercises.flatMap { ex ->
+            if (ex.isCircuit) ex.circuitExercises else listOf(ex.name)
+        }.distinct()
         val totalSets = _steps.value.size
 
         val result = WorkoutResult(

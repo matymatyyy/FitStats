@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.gimnasio.GimnasioApplication
 import com.app.gimnasio.data.model.BodyMeasurements
+import com.app.gimnasio.data.model.PRHistoryEntry
 import com.app.gimnasio.data.model.PersonalRecords
 import com.app.gimnasio.data.model.UserProfile
 import com.app.gimnasio.data.repository.ProfileRepository
@@ -34,6 +35,9 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     private val _totalWorkouts = MutableStateFlow(0)
     val totalWorkouts: StateFlow<Int> = _totalWorkouts.asStateFlow()
+
+    private val _prHistory = MutableStateFlow<List<PRHistoryEntry>>(emptyList())
+    val prHistory: StateFlow<List<PRHistoryEntry>> = _prHistory.asStateFlow()
 
     private val _isFirstTime = MutableStateFlow<Boolean?>(null)
     val isFirstTime: StateFlow<Boolean?> = _isFirstTime.asStateFlow()
@@ -73,6 +77,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             if (pr != null) _personalRecords.value = pr
 
             _totalWorkouts.value = withContext(Dispatchers.IO) { repository.getTotalWorkoutCount() }
+            _prHistory.value = withContext(Dispatchers.IO) { repository.getPRHistory() }
         }
     }
 
@@ -128,6 +133,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         _personalRecords.value = pr
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.savePersonalRecords(pr) }
+            _prHistory.value = withContext(Dispatchers.IO) { repository.getPRHistory() }
         }
     }
 
