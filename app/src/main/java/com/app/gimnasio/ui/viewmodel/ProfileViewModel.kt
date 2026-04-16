@@ -7,6 +7,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.gimnasio.GimnasioApplication
 import com.app.gimnasio.data.model.BodyMeasurements
+import com.app.gimnasio.data.model.CustomMeasurement
+import com.app.gimnasio.data.model.CustomMeasurementHistoryPoint
+import com.app.gimnasio.data.model.CustomPR
+import com.app.gimnasio.data.model.CustomPRHistoryPoint
 import com.app.gimnasio.data.model.PRHistoryEntry
 import com.app.gimnasio.data.model.PersonalRecords
 import com.app.gimnasio.data.model.UserProfile
@@ -38,6 +42,12 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     private val _prHistory = MutableStateFlow<List<PRHistoryEntry>>(emptyList())
     val prHistory: StateFlow<List<PRHistoryEntry>> = _prHistory.asStateFlow()
+
+    private val _customMeasurements = MutableStateFlow<List<CustomMeasurement>>(emptyList())
+    val customMeasurements: StateFlow<List<CustomMeasurement>> = _customMeasurements.asStateFlow()
+
+    private val _customPRs = MutableStateFlow<List<CustomPR>>(emptyList())
+    val customPRs: StateFlow<List<CustomPR>> = _customPRs.asStateFlow()
 
     private val _isFirstTime = MutableStateFlow<Boolean?>(null)
     val isFirstTime: StateFlow<Boolean?> = _isFirstTime.asStateFlow()
@@ -78,8 +88,60 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
             _totalWorkouts.value = withContext(Dispatchers.IO) { repository.getTotalWorkoutCount() }
             _prHistory.value = withContext(Dispatchers.IO) { repository.getPRHistory() }
+            _customMeasurements.value = withContext(Dispatchers.IO) { repository.getCustomMeasurements() }
+            _customPRs.value = withContext(Dispatchers.IO) { repository.getCustomPRs() }
         }
     }
+
+    fun saveCustomMeasurement(name: String, valueCm: Double, oldName: String? = null) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                if (oldName != null && oldName != name) {
+                    repository.deleteCustomMeasurement(oldName)
+                }
+                repository.upsertCustomMeasurement(CustomMeasurement(name = name, valueCm = valueCm))
+            }
+            _customMeasurements.value = withContext(Dispatchers.IO) { repository.getCustomMeasurements() }
+        }
+    }
+
+    fun deleteCustomMeasurement(name: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.deleteCustomMeasurement(name) }
+            _customMeasurements.value = withContext(Dispatchers.IO) { repository.getCustomMeasurements() }
+        }
+    }
+
+    suspend fun getCustomMeasurementHistory(name: String): List<CustomMeasurementHistoryPoint> =
+        withContext(Dispatchers.IO) { repository.getCustomMeasurementHistory(name) }
+
+    fun saveCustomPR(exerciseName: String, weightKg: Double, reps: Int, oldName: String? = null) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                if (oldName != null && oldName != exerciseName) {
+                    repository.deleteCustomPR(oldName)
+                }
+                repository.upsertCustomPR(CustomPR(exerciseName = exerciseName, weightKg = weightKg, reps = reps))
+            }
+            _customPRs.value = withContext(Dispatchers.IO) { repository.getCustomPRs() }
+        }
+    }
+
+    fun deleteCustomPR(exerciseName: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.deleteCustomPR(exerciseName) }
+            _customPRs.value = withContext(Dispatchers.IO) { repository.getCustomPRs() }
+        }
+    }
+
+    suspend fun getCustomPRHistory(exerciseName: String): List<CustomPRHistoryPoint> =
+        withContext(Dispatchers.IO) { repository.getCustomPRHistory(exerciseName) }
+
+    suspend fun getMeasurementHistoryByColumn(column: String): List<Pair<Long, Double>> =
+        withContext(Dispatchers.IO) { repository.getMeasurementHistoryByColumn(column) }
+
+    suspend fun getPRHistoryByColumn(column: String): List<Pair<Long, Double>> =
+        withContext(Dispatchers.IO) { repository.getPRHistoryByColumn(column) }
 
     fun saveName(name: String) {
         val updated = _profile.value.copy(name = name)

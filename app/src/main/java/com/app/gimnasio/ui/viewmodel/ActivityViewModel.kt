@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.gimnasio.GimnasioApplication
 import com.app.gimnasio.data.model.WorkoutLog
+import com.app.gimnasio.data.model.WorkoutSetLog
 import com.app.gimnasio.data.repository.WorkoutRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +15,33 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
+
+data class ExerciseStats(
+    val name: String,
+    val totalSets: Int,
+    val totalReps: Int,
+    val maxWeight: Double,
+    val totalVolume: Double // reps * weight
+)
+
+data class PeriodSummary(
+    val workouts: Int,
+    val totalSeconds: Int,
+    val totalSets: Int,
+    val totalReps: Int,
+    val totalVolume: Double,
+    val avgDurationSeconds: Int,
+    val exerciseBreakdown: List<ExerciseStats>,
+    val volumePerDay: List<Pair<Long, Double>>, // date to volume
+    val exerciseProgress: Map<String, List<ExerciseProgressPoint>> // exercise -> points over time
+)
+
+data class ExerciseProgressPoint(
+    val date: Long,
+    val maxWeight: Double,
+    val totalVolume: Double,
+    val totalReps: Int
+)
 
 class ActivityViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -31,6 +59,10 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     private val _selectedDateWorkouts = MutableStateFlow<List<WorkoutLog>>(emptyList())
     val selectedDateWorkouts: StateFlow<List<WorkoutLog>> = _selectedDateWorkouts.asStateFlow()
 
+    // Set logs for the selected date (detail view)
+    private val _selectedDateSetLogs = MutableStateFlow<List<WorkoutSetLog>>(emptyList())
+    val selectedDateSetLogs: StateFlow<List<WorkoutSetLog>> = _selectedDateSetLogs.asStateFlow()
+
     private val _weeklyCount = MutableStateFlow(0)
     val weeklyCount: StateFlow<Int> = _weeklyCount.asStateFlow()
 
@@ -43,7 +75,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     private val _weeklyTotalSets = MutableStateFlow(0)
     val weeklyTotalSets: StateFlow<Int> = _weeklyTotalSets.asStateFlow()
 
-    // Period-based stats (7/14/30 days)
+    // Period-based stats (7/14/30/90 days)
     private val _periodDays = MutableStateFlow(7)
     val periodDays: StateFlow<Int> = _periodDays.asStateFlow()
 
@@ -59,6 +91,14 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
     // Daily calories for chart: list of (dayLabel, calories)
     private val _dailyCalories = MutableStateFlow<List<Pair<String, Int>>>(emptyList())
     val dailyCalories: StateFlow<List<Pair<String, Int>>> = _dailyCalories.asStateFlow()
+
+    // Period summary with detailed stats
+    private val _periodSummary = MutableStateFlow<PeriodSummary?>(null)
+    val periodSummary: StateFlow<PeriodSummary?> = _periodSummary.asStateFlow()
+
+    // Exercise names that have logged data
+    private val _loggedExercises = MutableStateFlow<List<String>>(emptyList())
+    val loggedExercises: StateFlow<List<String>> = _loggedExercises.asStateFlow()
 
     // Widget suggestion banner
     private val prefs = application.getSharedPreferences("fitstats_prefs", Context.MODE_PRIVATE)
@@ -76,6 +116,15 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
         loadMonthData()
         loadWeeklyData()
         loadPeriodData()
+        loadLoggedExercises()
+    }
+
+    private fun loadLoggedExercises() {
+        viewModelScope.launch {
+            _loggedExercises.value = withContext(Dispatchers.IO) {
+                repository.getLoggedExerciseNames()
+            }
+        }
     }
 
     fun loadMonthData() {
@@ -142,8 +191,10 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             cal.add(Calendar.DAY_OF_YEAR, -(days - 1))
             val start = cal.timeInMillis
 
-            val logs = withContext(Dispatchers.IO) {
-                repository.getWorkoutLogsByDateRange(start, today)
+            val (logs, setLogs) = withContext(Dispatchers.IO) {
+                val l = repository.getWorkoutLogsByDateRange(start, today)
+                val s = repository.getSetLogsByDateRange(start, today)
+                l to s
             }
 
             val dates = logs.map { it.date }.toSet()
@@ -172,21 +223,68 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
                 iterCal.add(Calendar.DAY_OF_YEAR, 1)
             }
             _dailyCalories.value = dailyList
+
+            // Build detailed period summary
+            val totalReps = setLogs.mapNotNull { it.reps }.sum()
+            val totalVolume = setLogs.sumOf { (it.reps ?: 0) * (it.weightKg ?: 0.0) }
+
+            val exerciseBreakdown = setLogs.groupBy { it.exerciseName }.map { (name, sets) ->
+                ExerciseStats(
+                    name = name,
+                    totalSets = sets.size,
+                    totalReps = sets.mapNotNull { it.reps }.sum(),
+                    maxWeight = sets.mapNotNull { it.weightKg }.maxOrNull() ?: 0.0,
+                    totalVolume = sets.sumOf { (it.reps ?: 0) * (it.weightKg ?: 0.0) }
+                )
+            }.sortedByDescending { it.totalVolume }
+
+            val volumePerDay = setLogs.groupBy { it.date }.map { (date, sets) ->
+                date to sets.sumOf { (it.reps ?: 0) * (it.weightKg ?: 0.0) }
+            }.sortedBy { it.first }
+
+            // Exercise progression: for each exercise, group by date
+            val exerciseProgress = setLogs.groupBy { it.exerciseName }.mapValues { (_, sets) ->
+                sets.groupBy { it.date }.map { (date, daySets) ->
+                    ExerciseProgressPoint(
+                        date = date,
+                        maxWeight = daySets.mapNotNull { it.weightKg }.maxOrNull() ?: 0.0,
+                        totalVolume = daySets.sumOf { (it.reps ?: 0) * (it.weightKg ?: 0.0) },
+                        totalReps = daySets.mapNotNull { it.reps }.sum()
+                    )
+                }.sortedBy { it.date }
+            }
+
+            _periodSummary.value = PeriodSummary(
+                workouts = dates.size,
+                totalSeconds = logs.sumOf { it.durationSeconds },
+                totalSets = setLogs.size,
+                totalReps = totalReps,
+                totalVolume = totalVolume,
+                avgDurationSeconds = if (dates.isNotEmpty()) logs.sumOf { it.durationSeconds } / dates.size else 0,
+                exerciseBreakdown = exerciseBreakdown,
+                volumePerDay = volumePerDay,
+                exerciseProgress = exerciseProgress
+            )
         }
     }
 
     fun selectDate(date: Long) {
         _selectedDate.value = date
         viewModelScope.launch {
-            _selectedDateWorkouts.value = withContext(Dispatchers.IO) {
-                repository.getWorkoutLogsForDate(date)
+            val (workouts, sets) = withContext(Dispatchers.IO) {
+                val w = repository.getWorkoutLogsForDate(date)
+                val s = repository.getSetLogsByDateRange(date, date)
+                w to s
             }
+            _selectedDateWorkouts.value = workouts
+            _selectedDateSetLogs.value = sets
         }
     }
 
     fun clearSelection() {
         _selectedDate.value = null
         _selectedDateWorkouts.value = emptyList()
+        _selectedDateSetLogs.value = emptyList()
     }
 
     fun previousMonth() {
@@ -217,7 +315,6 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             }
             loadMonthData()
             loadWeeklyData()
-            // Refresh selected date if same
             if (_selectedDate.value == date) {
                 selectDate(date)
             }
@@ -231,6 +328,7 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
             }
             loadMonthData()
             loadWeeklyData()
+            loadPeriodData()
             _selectedDate.value?.let { selectDate(it) }
         }
     }
@@ -240,5 +338,12 @@ class ActivityViewModel(application: Application) : AndroidViewModel(application
         val hours = totalSeconds / 3600
         val minutes = (totalSeconds % 3600) / 60
         return if (hours > 0) "${hours}h ${minutes}min" else "${minutes}min"
+    }
+
+    fun formatVolume(kg: Double): String {
+        return when {
+            kg >= 1000 -> "${String.format("%.1f", kg / 1000)}t"
+            else -> "${kg.toInt()} kg"
+        }
     }
 }

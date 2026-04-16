@@ -171,6 +171,26 @@ fun ActiveWorkoutScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Show what's next
+                        currentStep?.let { step ->
+                            val nextLabel = if (step.isCircuitStep) {
+                                "Siguiente: ${step.circuitExerciseName ?: ""}"
+                            } else {
+                                if (step.totalSets > 1) {
+                                    "Siguiente: ${step.exercise.name} · Serie ${step.currentSet}/${step.totalSets}"
+                                } else {
+                                    "Siguiente: ${step.exercise.name}"
+                                }
+                            }
+                            Text(
+                                text = nextLabel,
+                                color = TextGray,
+                                fontSize = 13.sp
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = viewModel.formatTime(restSecondsRemaining),
@@ -178,7 +198,7 @@ fun ActiveWorkoutScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 48.sp
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         TextButton(onClick = { viewModel.skipRest() }) {
                             Icon(
                                 Icons.Default.SkipNext,
@@ -433,6 +453,32 @@ fun ActiveWorkoutScreen(
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
+            }
+
+            // Skip exercise button (skip all remaining sets of current exercise)
+            currentStep?.let { step ->
+                val hasMoreSets = step.totalSets > 1 && step.currentSet < step.totalSets
+                val isCircuitWithMoreSteps = step.isCircuitStep
+                if (hasMoreSets || isCircuitWithMoreSteps || isResting) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { viewModel.skipToNextExercise() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.SkipNext,
+                            contentDescription = null,
+                            tint = TextGray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Saltar ejercicio",
+                            color = TextGray,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

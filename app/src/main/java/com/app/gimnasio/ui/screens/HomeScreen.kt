@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,12 +38,15 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -127,7 +131,10 @@ fun HomeScreen(
     periodTotalSeconds: Int = 0,
     periodTotalSets: Int = 0,
     dailyCalories: List<Pair<String, Int>> = emptyList(),
-    onPeriodChange: (Int) -> Unit = {}
+    onPeriodChange: (Int) -> Unit = {},
+    hasActiveWorkout: Boolean = false,
+    onResumeWorkout: () -> Unit = {},
+    onDiscardWorkout: () -> Unit = {}
 ) {
     var showSettingsSheet by remember { mutableStateOf(false) }
 
@@ -149,6 +156,15 @@ fun HomeScreen(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Resume workout banner
+        if (hasActiveWorkout) {
+            ResumeWorkoutBanner(
+                onResume = onResumeWorkout,
+                onDiscard = onDiscardWorkout
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         // Info card
         if (showInfoCard) {
@@ -1158,5 +1174,69 @@ private fun formatVolume(totalSeconds: Int): String {
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60
     return if (hours > 0) "${hours}h${minutes}m" else "${minutes}m"
+}
+
+@Composable
+private fun ResumeWorkoutBanner(
+    onResume: () -> Unit,
+    onDiscard: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = LimeGreen.copy(alpha = 0.15f)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.FitnessCenter,
+                contentDescription = null,
+                tint = LimeGreen,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Entrenamiento en curso",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+                Text(
+                    text = "Tenés una rutina sin terminar",
+                    color = TextGray,
+                    fontSize = 13.sp
+                )
+            }
+            IconButton(onClick = onDiscard, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Descartar",
+                    tint = TextGray,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            Button(
+                onClick = onResume,
+                colors = ButtonDefaults.buttonColors(containerColor = LimeGreen),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Retomar", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+    }
 }
 

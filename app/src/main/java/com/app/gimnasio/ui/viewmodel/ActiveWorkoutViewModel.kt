@@ -1,6 +1,7 @@
 package com.app.gimnasio.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.gimnasio.GimnasioApplication
@@ -8,6 +9,7 @@ import com.app.gimnasio.data.model.Exercise
 import com.app.gimnasio.data.model.ExercisePhase
 import com.app.gimnasio.data.model.Routine
 import com.app.gimnasio.data.model.WorkoutLog
+import com.app.gimnasio.data.model.WorkoutSetLog
 import com.app.gimnasio.data.repository.RoutineRepository
 import com.app.gimnasio.data.repository.WorkoutRepository
 import com.app.gimnasio.widget.WidgetUpdater
@@ -78,14 +80,20 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     private val _workoutResult = MutableStateFlow<WorkoutResult?>(null)
     val workoutResult: StateFlow<WorkoutResult?> = _workoutResult.asStateFlow()
 
+    private val _hasActiveWorkout = MutableStateFlow(false)
+    val hasActiveWorkout: StateFlow<Boolean> = _hasActiveWorkout.asStateFlow()
+
     private var timerJob: Job? = null
     private var restTimerJob: Job? = null
     private var startTimeMillis: Long = 0L
+
+    private val prefs = application.getSharedPreferences("active_workout", Context.MODE_PRIVATE)
 
     init {
         val db = (application as GimnasioApplication).database
         routineRepository = RoutineRepository(db)
         workoutRepository = WorkoutRepository(db)
+        _hasActiveWorkout.value = hasSavedWorkout()
     }
 
     private var currentRoutineId: Long? = null
@@ -99,22 +107,66 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                 routineRepository.getRoutineById(routineId)
             } ?: return@launch
 
+            val steps = buildSteps(r.exercises)
+
+            // Check if we have a saved session for this routine
+            val savedRoutineId = prefs.getLong("routine_id", -1L)
+            val savedStepIndex = prefs.getInt("step_index", 0)
+            val savedStartTime = prefs.getLong("start_time", 0L)
+            val isResume = savedRoutineId == routineId
+                    && savedStartTime > 0L
+                    && savedStepIndex < steps.size
+
             _routine.value = r
             _isFinished.value = false
             _workoutResult.value = null
-            _currentStepIndex.value = 0
-            _elapsedSeconds.value = 0
             _isResting.value = false
 
-            val steps = buildSteps(r.exercises)
             _steps.value = steps
             _totalSteps.value = steps.size
-            _currentStep.value = steps.firstOrNull()
 
-            startTimeMillis = System.currentTimeMillis()
+            if (isResume) {
+                // Restore from saved state
+                _currentStepIndex.value = savedStepIndex
+                _currentStep.value = steps[savedStepIndex]
+                startTimeMillis = savedStartTime
+                // Calculate elapsed from the real start time
+                _elapsedSeconds.value = ((System.currentTimeMillis() - savedStartTime) / 1000).toInt()
+            } else {
+                // Fresh start
+                _currentStepIndex.value = 0
+                _currentStep.value = steps.firstOrNull()
+                _elapsedSeconds.value = 0
+                startTimeMillis = System.currentTimeMillis()
+                saveState()
+            }
+
             startTimer()
         }
     }
+
+    private fun saveState() {
+        prefs.edit()
+            .putLong("routine_id", currentRoutineId ?: -1L)
+            .putInt("step_index", _currentStepIndex.value)
+            .putLong("start_time", startTimeMillis)
+            .apply()
+        _hasActiveWorkout.value = true
+    }
+
+    private fun clearSavedState() {
+        prefs.edit().clear().apply()
+        _hasActiveWorkout.value = false
+    }
+
+    /** Check if there's a workout in progress that can be resumed */
+    fun hasSavedWorkout(): Boolean {
+        val savedRoutineId = prefs.getLong("routine_id", -1L)
+        val savedStartTime = prefs.getLong("start_time", 0L)
+        return savedRoutineId != -1L && savedStartTime > 0L
+    }
+
+    fun getSavedRoutineId(): Long = prefs.getLong("routine_id", -1L)
 
     private fun buildSteps(exercises: List<Exercise>): List<WorkoutStep> {
         val steps = mutableListOf<WorkoutStep>()
@@ -171,13 +223,21 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (true) {
+                _elapsedSeconds.value = ((System.currentTimeMillis() - startTimeMillis) / 1000).toInt()
                 delay(1000)
-                _elapsedSeconds.value++
             }
         }
     }
 
     fun completeCurrentStep() {
+        val wasResting = _isResting.value
+        if (wasResting) {
+            // Cancel current rest before advancing
+            restTimerJob?.cancel()
+            _isResting.value = false
+            _restSecondsRemaining.value = 0
+        }
+
         val steps = _steps.value
         val nextIndex = _currentStepIndex.value + 1
 
@@ -189,27 +249,54 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         val currentStep = steps[_currentStepIndex.value]
         val nextStep = steps[nextIndex]
 
-        // Rest logic: rest after strength sets and between circuit rounds
-        val shouldRest = if (currentStep.isCircuitStep) {
-            // Rest between circuit rounds (after last exercise in a round, before next round)
-            currentStep.exercise.phase == ExercisePhase.STRENGTH &&
-                    currentStep.exercise.restSeconds != null &&
-                    currentStep.exercise.restSeconds > 0 &&
-                    nextStep.isCircuitStep &&
-                    nextStep.circuitRound != currentStep.circuitRound
-        } else {
-            currentStep.exercise.phase == ExercisePhase.STRENGTH &&
-                    currentStep.exercise.restSeconds != null &&
-                    currentStep.exercise.restSeconds > 0 &&
-                    nextIndex < steps.size
-        }
+        // Don't trigger rest if we were already resting (user is skipping ahead)
+        if (!wasResting) {
+            val shouldRest = if (currentStep.isCircuitStep) {
+                currentStep.exercise.phase == ExercisePhase.STRENGTH &&
+                        currentStep.exercise.restSeconds != null &&
+                        currentStep.exercise.restSeconds > 0 &&
+                        nextStep.isCircuitStep &&
+                        nextStep.circuitRound != currentStep.circuitRound
+            } else {
+                currentStep.exercise.phase == ExercisePhase.STRENGTH &&
+                        currentStep.exercise.restSeconds != null &&
+                        currentStep.exercise.restSeconds > 0 &&
+                        nextIndex < steps.size
+            }
 
-        if (shouldRest) {
-            startRestTimer(currentStep.exercise.restSeconds!!)
+            if (shouldRest) {
+                startRestTimer(currentStep.exercise.restSeconds!!)
+            }
         }
 
         _currentStepIndex.value = nextIndex
         _currentStep.value = nextStep
+        saveState()
+    }
+
+    fun skipToNextExercise() {
+        restTimerJob?.cancel()
+        _isResting.value = false
+        _restSecondsRemaining.value = 0
+
+        val steps = _steps.value
+        val currentIdx = _currentStepIndex.value
+        val currentExercise = steps[currentIdx].exercise
+
+        // Find the first step that belongs to a different exercise
+        var nextIdx = currentIdx + 1
+        while (nextIdx < steps.size && steps[nextIdx].exercise === currentExercise) {
+            nextIdx++
+        }
+
+        if (nextIdx >= steps.size) {
+            finishWorkout()
+            return
+        }
+
+        _currentStepIndex.value = nextIdx
+        _currentStep.value = steps[nextIdx]
+        saveState()
     }
 
     fun skipRest() {
@@ -236,6 +323,7 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         timerJob?.cancel()
         restTimerJob?.cancel()
         _isResting.value = false
+        clearSavedState()
 
         val r = _routine.value ?: return
         val elapsed = _elapsedSeconds.value
@@ -256,6 +344,7 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         _isFinished.value = true
 
         // Save to database
+        val completedSteps = _steps.value
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val today = Calendar.getInstance().apply {
@@ -265,7 +354,7 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                     set(Calendar.MILLISECOND, 0)
                 }.timeInMillis
 
-                workoutRepository.insertWorkoutLog(
+                val logId = workoutRepository.insertWorkoutLog(
                     WorkoutLog(
                         routineId = r.id,
                         routineName = r.name,
@@ -275,6 +364,29 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                         totalSets = totalSets
                     )
                 )
+
+                // Save detailed per-set data
+                val setLogs = completedSteps.map { step ->
+                    val exName = if (step.isCircuitStep) {
+                        step.circuitExerciseName ?: step.exercise.name
+                    } else {
+                        step.exercise.name
+                    }
+                    WorkoutSetLog(
+                        workoutLogId = logId,
+                        exerciseName = exName,
+                        setNumber = step.currentSet,
+                        reps = step.repsForThisSet
+                            ?: step.exercise.strengthReps
+                            ?: step.exercise.reps,
+                        weightKg = step.weightForThisSet ?: step.exercise.weightKg,
+                        durationSeconds = step.exercise.durationSeconds,
+                        phase = step.exercise.phase.name,
+                        isCircuit = step.isCircuitStep,
+                        date = today
+                    )
+                }
+                workoutRepository.insertSetLogs(setLogs, logId)
             }
             WidgetUpdater.updateAll(getApplication())
         }
@@ -283,6 +395,7 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     fun reset() {
         timerJob?.cancel()
         restTimerJob?.cancel()
+        clearSavedState()
         currentRoutineId = null
         _routine.value = null
         _steps.value = emptyList()

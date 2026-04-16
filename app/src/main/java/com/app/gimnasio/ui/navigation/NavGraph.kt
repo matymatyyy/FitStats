@@ -239,7 +239,13 @@ fun GimnasioNavGraph(navController: NavHostController) {
                 val periodTotalSeconds by activityViewModel.periodTotalSeconds.collectAsState()
                 val periodTotalSets by activityViewModel.periodTotalSets.collectAsState()
                 val dailyCalories by activityViewModel.dailyCalories.collectAsState()
-                LaunchedEffect(Unit) { planViewModel.loadPlan() }
+                val hasActiveWorkout by activeWorkoutViewModel.hasActiveWorkout.collectAsState()
+                LaunchedEffect(Unit) {
+                    planViewModel.loadPlan()
+                    activityViewModel.loadWeeklyData()
+                    activityViewModel.loadPeriodData()
+                    activityViewModel.loadMonthData()
+                }
                 HomeScreen(
                     onNavigateToRoutines = { navController.navigate(Routes.ROUTINES) },
                     onNavigateToTimer = { navController.navigate(Routes.REST_TIMER) },
@@ -286,7 +292,17 @@ fun GimnasioNavGraph(navController: NavHostController) {
                     periodTotalSeconds = periodTotalSeconds,
                     periodTotalSets = periodTotalSets,
                     dailyCalories = dailyCalories,
-                    onPeriodChange = { activityViewModel.setPeriod(it) }
+                    onPeriodChange = { activityViewModel.setPeriod(it) },
+                    hasActiveWorkout = hasActiveWorkout,
+                    onResumeWorkout = {
+                        val savedId = activeWorkoutViewModel.getSavedRoutineId()
+                        if (savedId != -1L) {
+                            navController.navigate(Routes.activeWorkout(savedId))
+                        }
+                    },
+                    onDiscardWorkout = {
+                        activeWorkoutViewModel.reset()
+                    }
                 )
             }
 

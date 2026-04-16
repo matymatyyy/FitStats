@@ -47,6 +47,18 @@ class CreateRoutineViewModel : ViewModel() {
         _strengthExercises.value = _strengthExercises.value.toMutableList().apply { set(index, exercise) }
     }
 
+    fun moveWarmupExercise(fromIndex: Int, toIndex: Int) {
+        _warmupExercises.value = _warmupExercises.value.toMutableList().apply {
+            add(toIndex, removeAt(fromIndex))
+        }
+    }
+
+    fun moveStrengthExercise(fromIndex: Int, toIndex: Int) {
+        _strengthExercises.value = _strengthExercises.value.toMutableList().apply {
+            add(toIndex, removeAt(fromIndex))
+        }
+    }
+
     fun getAllExercises(): List<Exercise> =
         _warmupExercises.value + _strengthExercises.value
 

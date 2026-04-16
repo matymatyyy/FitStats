@@ -31,6 +31,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -242,13 +244,17 @@ fun CreateRoutineScreen(
                     CircuitExerciseItem(
                         exercise = exercise,
                         onClick = { editingWarmupIndex = index },
-                        onDelete = { viewModel.removeWarmupExercise(index) }
+                        onDelete = { viewModel.removeWarmupExercise(index) },
+                        onMoveUp = if (index > 0) {{ viewModel.moveWarmupExercise(index, index - 1) }} else null,
+                        onMoveDown = if (index < warmupExercises.lastIndex) {{ viewModel.moveWarmupExercise(index, index + 1) }} else null
                     )
                 } else {
                     WarmupExerciseItem(
                         exercise = exercise,
                         onClick = { editingWarmupIndex = index },
-                        onDelete = { viewModel.removeWarmupExercise(index) }
+                        onDelete = { viewModel.removeWarmupExercise(index) },
+                        onMoveUp = if (index > 0) {{ viewModel.moveWarmupExercise(index, index - 1) }} else null,
+                        onMoveDown = if (index < warmupExercises.lastIndex) {{ viewModel.moveWarmupExercise(index, index + 1) }} else null
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -286,13 +292,17 @@ fun CreateRoutineScreen(
                     CircuitExerciseItem(
                         exercise = exercise,
                         onClick = { editingStrengthIndex = index },
-                        onDelete = { viewModel.removeStrengthExercise(index) }
+                        onDelete = { viewModel.removeStrengthExercise(index) },
+                        onMoveUp = if (index > 0) {{ viewModel.moveStrengthExercise(index, index - 1) }} else null,
+                        onMoveDown = if (index < strengthExercises.lastIndex) {{ viewModel.moveStrengthExercise(index, index + 1) }} else null
                     )
                 } else {
                     StrengthExerciseItem(
                         exercise = exercise,
                         onClick = { editingStrengthIndex = index },
-                        onDelete = { viewModel.removeStrengthExercise(index) }
+                        onDelete = { viewModel.removeStrengthExercise(index) },
+                        onMoveUp = if (index > 0) {{ viewModel.moveStrengthExercise(index, index - 1) }} else null,
+                        onMoveDown = if (index < strengthExercises.lastIndex) {{ viewModel.moveStrengthExercise(index, index + 1) }} else null
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -449,6 +459,42 @@ fun CreateRoutineScreen(
 }
 
 @Composable
+private fun ReorderButtons(
+    onMoveUp: (() -> Unit)?,
+    onMoveDown: (() -> Unit)?
+) {
+    Column(
+        modifier = Modifier.padding(end = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        IconButton(
+            onClick = { onMoveUp?.invoke() },
+            enabled = onMoveUp != null,
+            modifier = Modifier.size(28.dp)
+        ) {
+            Icon(
+                Icons.Default.KeyboardArrowUp,
+                contentDescription = "Mover arriba",
+                tint = if (onMoveUp != null) LimeGreen else TextGray.copy(alpha = 0.3f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        IconButton(
+            onClick = { onMoveDown?.invoke() },
+            enabled = onMoveDown != null,
+            modifier = Modifier.size(28.dp)
+        ) {
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                contentDescription = "Mover abajo",
+                tint = if (onMoveDown != null) LimeGreen else TextGray.copy(alpha = 0.3f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun SectionHeader(title: String, subtitle: String) {
     Text(
         text = title,
@@ -488,7 +534,13 @@ private fun AddExerciseButton(
 }
 
 @Composable
-private fun WarmupExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun WarmupExerciseItem(
+    exercise: Exercise,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
+) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = DarkCard),
@@ -500,6 +552,7 @@ private fun WarmupExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            ReorderButtons(onMoveUp = onMoveUp, onMoveDown = onMoveDown)
             Column(modifier = Modifier.weight(1f)) {
                 Text(exercise.name, color = Color.White, fontWeight = FontWeight.Bold)
                 val detail = if (exercise.durationSeconds != null) {
@@ -517,7 +570,13 @@ private fun WarmupExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete
 }
 
 @Composable
-private fun StrengthExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun StrengthExerciseItem(
+    exercise: Exercise,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
+) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = DarkCard),
@@ -529,6 +588,7 @@ private fun StrengthExerciseItem(exercise: Exercise, onClick: () -> Unit, onDele
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            ReorderButtons(onMoveUp = onMoveUp, onMoveDown = onMoveDown)
             Column(modifier = Modifier.weight(1f)) {
                 Text(exercise.name, color = Color.White, fontWeight = FontWeight.Bold)
                 val isCustom = exercise.weightPerSet != null || exercise.repsPerSet != null
@@ -565,7 +625,13 @@ private fun StrengthExerciseItem(exercise: Exercise, onClick: () -> Unit, onDele
 }
 
 @Composable
-private fun CircuitExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun CircuitExerciseItem(
+    exercise: Exercise,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
+) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = DarkCard),
@@ -577,6 +643,7 @@ private fun CircuitExerciseItem(exercise: Exercise, onClick: () -> Unit, onDelet
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            ReorderButtons(onMoveUp = onMoveUp, onMoveDown = onMoveDown)
             Icon(
                 Icons.Default.Loop,
                 contentDescription = null,

@@ -10,12 +10,17 @@ import com.app.gimnasio.data.model.ExercisePhase
 import com.app.gimnasio.data.model.MuscleGroup
 import com.app.gimnasio.data.model.Routine
 import com.app.gimnasio.data.model.BodyMeasurements
+import com.app.gimnasio.data.model.CustomMeasurement
+import com.app.gimnasio.data.model.CustomMeasurementHistoryPoint
+import com.app.gimnasio.data.model.CustomPR
+import com.app.gimnasio.data.model.CustomPRHistoryPoint
 import com.app.gimnasio.data.model.MeasurementsHistoryEntry
 import com.app.gimnasio.data.model.PRHistoryEntry
 import com.app.gimnasio.data.model.PersonalRecords
 import com.app.gimnasio.data.model.UserProfile
 import com.app.gimnasio.data.model.WorkoutLog
 import com.app.gimnasio.data.model.WorkoutPlanDay
+import com.app.gimnasio.data.model.WorkoutSetLog
 
 class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
     context, DATABASE_NAME, null, DATABASE_VERSION
@@ -78,6 +83,24 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
             )
         """)
         db.execSQL("CREATE INDEX idx_workout_date ON workout_logs(date)")
+
+        db.execSQL("""
+            CREATE TABLE workout_set_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workout_log_id INTEGER NOT NULL,
+                exercise_name TEXT NOT NULL,
+                set_number INTEGER NOT NULL,
+                reps INTEGER,
+                weight_kg REAL,
+                duration_seconds INTEGER,
+                phase TEXT NOT NULL,
+                is_circuit INTEGER NOT NULL DEFAULT 0,
+                date INTEGER NOT NULL,
+                FOREIGN KEY (workout_log_id) REFERENCES workout_logs(id) ON DELETE CASCADE
+            )
+        """)
+        db.execSQL("CREATE INDEX idx_set_logs_workout ON workout_set_logs(workout_log_id)")
+        db.execSQL("CREATE INDEX idx_set_logs_exercise ON workout_set_logs(exercise_name, date)")
 
         db.execSQL("""
             CREATE TABLE user_profile (
@@ -143,6 +166,41 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                 date INTEGER NOT NULL,
                 sentadillas REAL, peso_muerto REAL, press_banca REAL,
                 press_militar REAL, dominadas REAL
+            )
+        """)
+
+        db.execSQL("""
+            CREATE TABLE custom_measurements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                value_cm REAL NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        db.execSQL("""
+            CREATE TABLE custom_measurements_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                value_cm REAL NOT NULL,
+                date INTEGER NOT NULL
+            )
+        """)
+        db.execSQL("""
+            CREATE TABLE custom_prs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                exercise_name TEXT NOT NULL UNIQUE,
+                weight_kg REAL NOT NULL,
+                reps INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        db.execSQL("""
+            CREATE TABLE custom_prs_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                exercise_name TEXT NOT NULL,
+                weight_kg REAL NOT NULL,
+                reps INTEGER NOT NULL,
+                date INTEGER NOT NULL
             )
         """)
 
@@ -349,6 +407,61 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                     date INTEGER NOT NULL,
                     sentadillas REAL, peso_muerto REAL, press_banca REAL,
                     press_militar REAL, dominadas REAL
+                )
+            """)
+        }
+        if (oldVersion < 12) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS workout_set_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    workout_log_id INTEGER NOT NULL,
+                    exercise_name TEXT NOT NULL,
+                    set_number INTEGER NOT NULL,
+                    reps INTEGER,
+                    weight_kg REAL,
+                    duration_seconds INTEGER,
+                    phase TEXT NOT NULL,
+                    is_circuit INTEGER NOT NULL DEFAULT 0,
+                    date INTEGER NOT NULL,
+                    FOREIGN KEY (workout_log_id) REFERENCES workout_logs(id) ON DELETE CASCADE
+                )
+            """)
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_set_logs_workout ON workout_set_logs(workout_log_id)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_set_logs_exercise ON workout_set_logs(exercise_name, date)")
+        }
+        if (oldVersion < 13) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS custom_measurements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    value_cm REAL NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+            """)
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS custom_measurements_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    value_cm REAL NOT NULL,
+                    date INTEGER NOT NULL
+                )
+            """)
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS custom_prs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    exercise_name TEXT NOT NULL UNIQUE,
+                    weight_kg REAL NOT NULL,
+                    reps INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+            """)
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS custom_prs_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    exercise_name TEXT NOT NULL,
+                    weight_kg REAL NOT NULL,
+                    reps INTEGER NOT NULL,
+                    date INTEGER NOT NULL
                 )
             """)
         }
@@ -665,7 +778,103 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
 
     fun deleteWorkoutLog(id: Long) {
         val db = writableDatabase
+        db.delete("workout_set_logs", "workout_log_id = ?", arrayOf(id.toString()))
         db.delete("workout_logs", "id = ?", arrayOf(id.toString()))
+    }
+
+    fun insertWorkoutSetLogs(logs: List<WorkoutSetLog>, workoutLogId: Long) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            logs.forEach { log ->
+                db.insert("workout_set_logs", null, ContentValues().apply {
+                    put("workout_log_id", workoutLogId)
+                    put("exercise_name", log.exerciseName)
+                    put("set_number", log.setNumber)
+                    put("reps", log.reps)
+                    put("weight_kg", log.weightKg)
+                    put("duration_seconds", log.durationSeconds)
+                    put("phase", log.phase)
+                    put("is_circuit", if (log.isCircuit) 1 else 0)
+                    put("date", log.date)
+                })
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun getSetLogsByDateRange(startDate: Long, endDate: Long): List<WorkoutSetLog> {
+        val db = readableDatabase
+        val list = mutableListOf<WorkoutSetLog>()
+        val cursor = db.rawQuery(
+            """SELECT id, workout_log_id, exercise_name, set_number, reps, weight_kg,
+                      duration_seconds, phase, is_circuit, date
+               FROM workout_set_logs WHERE date >= ? AND date <= ? ORDER BY date ASC, id ASC""",
+            arrayOf(startDate.toString(), endDate.toString())
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(WorkoutSetLog(
+                    id = it.getLong(0),
+                    workoutLogId = it.getLong(1),
+                    exerciseName = it.getString(2),
+                    setNumber = it.getInt(3),
+                    reps = if (it.isNull(4)) null else it.getInt(4),
+                    weightKg = if (it.isNull(5)) null else it.getDouble(5),
+                    durationSeconds = if (it.isNull(6)) null else it.getInt(6),
+                    phase = it.getString(7),
+                    isCircuit = it.getInt(8) == 1,
+                    date = it.getLong(9)
+                ))
+            }
+        }
+        return list
+    }
+
+    fun getSetLogsForWorkout(workoutLogId: Long): List<WorkoutSetLog> {
+        val db = readableDatabase
+        val list = mutableListOf<WorkoutSetLog>()
+        val cursor = db.rawQuery(
+            """SELECT id, workout_log_id, exercise_name, set_number, reps, weight_kg,
+                      duration_seconds, phase, is_circuit, date
+               FROM workout_set_logs WHERE workout_log_id = ? ORDER BY id ASC""",
+            arrayOf(workoutLogId.toString())
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(WorkoutSetLog(
+                    id = it.getLong(0),
+                    workoutLogId = it.getLong(1),
+                    exerciseName = it.getString(2),
+                    setNumber = it.getInt(3),
+                    reps = if (it.isNull(4)) null else it.getInt(4),
+                    weightKg = if (it.isNull(5)) null else it.getDouble(5),
+                    durationSeconds = if (it.isNull(6)) null else it.getInt(6),
+                    phase = it.getString(7),
+                    isCircuit = it.getInt(8) == 1,
+                    date = it.getLong(9)
+                ))
+            }
+        }
+        return list
+    }
+
+    /** Get distinct exercise names that have set logs */
+    fun getLoggedExerciseNames(): List<String> {
+        val db = readableDatabase
+        val list = mutableListOf<String>()
+        val cursor = db.rawQuery(
+            "SELECT DISTINCT exercise_name FROM workout_set_logs ORDER BY exercise_name",
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(it.getString(0))
+            }
+        }
+        return list
     }
 
     fun getTotalWorkoutCount(): Int {
@@ -903,9 +1112,180 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
         db.delete("workout_plan_days", null, null)
     }
 
+    // --- Fixed measurement/PR history by column ---
+
+    private val allowedMeasurementCols = setOf(
+        "cintura","abdomen","gluteos","pecho","hombros","antebrazo","biceps","muslos","pantorrillas","cuello"
+    )
+    private val allowedPRCols = setOf(
+        "sentadillas","peso_muerto","press_banca","press_militar","dominadas"
+    )
+
+    fun getMeasurementHistoryByColumn(column: String): List<Pair<Long, Double>> {
+        if (column !in allowedMeasurementCols) return emptyList()
+        val db = readableDatabase
+        val list = mutableListOf<Pair<Long, Double>>()
+        val cursor = db.rawQuery(
+            "SELECT date, $column FROM body_measurements_history WHERE $column IS NOT NULL ORDER BY date ASC",
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) list.add(it.getLong(0) to it.getDouble(1))
+        }
+        return list
+    }
+
+    fun getPRHistoryByColumn(column: String): List<Pair<Long, Double>> {
+        if (column !in allowedPRCols) return emptyList()
+        val db = readableDatabase
+        val list = mutableListOf<Pair<Long, Double>>()
+        val cursor = db.rawQuery(
+            "SELECT date, $column FROM personal_records_history WHERE $column IS NOT NULL ORDER BY date ASC",
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) list.add(it.getLong(0) to it.getDouble(1))
+        }
+        return list
+    }
+
+    // --- Custom Measurements ---
+
+    fun getCustomMeasurements(): List<CustomMeasurement> {
+        val db = readableDatabase
+        val list = mutableListOf<CustomMeasurement>()
+        val cursor = db.rawQuery(
+            "SELECT id, name, value_cm, updated_at FROM custom_measurements ORDER BY name",
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(CustomMeasurement(
+                    id = it.getLong(0),
+                    name = it.getString(1),
+                    valueCm = it.getDouble(2),
+                    updatedAt = it.getLong(3)
+                ))
+            }
+        }
+        return list
+    }
+
+    fun upsertCustomMeasurement(m: CustomMeasurement) {
+        val db = writableDatabase
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put("name", m.name)
+            put("value_cm", m.valueCm)
+            put("updated_at", now)
+        }
+        val updated = db.update("custom_measurements", values, "name = ?", arrayOf(m.name))
+        if (updated == 0) {
+            db.insert("custom_measurements", null, values)
+        }
+        db.insert("custom_measurements_history", null, ContentValues().apply {
+            put("name", m.name)
+            put("value_cm", m.valueCm)
+            put("date", now)
+        })
+    }
+
+    fun deleteCustomMeasurement(name: String) {
+        val db = writableDatabase
+        db.delete("custom_measurements", "name = ?", arrayOf(name))
+        db.delete("custom_measurements_history", "name = ?", arrayOf(name))
+    }
+
+    fun getCustomMeasurementHistory(name: String): List<CustomMeasurementHistoryPoint> {
+        val db = readableDatabase
+        val list = mutableListOf<CustomMeasurementHistoryPoint>()
+        val cursor = db.rawQuery(
+            "SELECT date, value_cm FROM custom_measurements_history WHERE name = ? ORDER BY date ASC",
+            arrayOf(name)
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(CustomMeasurementHistoryPoint(
+                    date = it.getLong(0),
+                    valueCm = it.getDouble(1)
+                ))
+            }
+        }
+        return list
+    }
+
+    // --- Custom PRs ---
+
+    fun getCustomPRs(): List<CustomPR> {
+        val db = readableDatabase
+        val list = mutableListOf<CustomPR>()
+        val cursor = db.rawQuery(
+            "SELECT id, exercise_name, weight_kg, reps, updated_at FROM custom_prs ORDER BY exercise_name",
+            null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(CustomPR(
+                    id = it.getLong(0),
+                    exerciseName = it.getString(1),
+                    weightKg = it.getDouble(2),
+                    reps = it.getInt(3),
+                    updatedAt = it.getLong(4)
+                ))
+            }
+        }
+        return list
+    }
+
+    fun upsertCustomPR(pr: CustomPR) {
+        val db = writableDatabase
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put("exercise_name", pr.exerciseName)
+            put("weight_kg", pr.weightKg)
+            put("reps", pr.reps)
+            put("updated_at", now)
+        }
+        val updated = db.update("custom_prs", values, "exercise_name = ?", arrayOf(pr.exerciseName))
+        if (updated == 0) {
+            db.insert("custom_prs", null, values)
+        }
+        db.insert("custom_prs_history", null, ContentValues().apply {
+            put("exercise_name", pr.exerciseName)
+            put("weight_kg", pr.weightKg)
+            put("reps", pr.reps)
+            put("date", now)
+        })
+    }
+
+    fun deleteCustomPR(exerciseName: String) {
+        val db = writableDatabase
+        db.delete("custom_prs", "exercise_name = ?", arrayOf(exerciseName))
+        db.delete("custom_prs_history", "exercise_name = ?", arrayOf(exerciseName))
+    }
+
+    fun getCustomPRHistory(exerciseName: String): List<CustomPRHistoryPoint> {
+        val db = readableDatabase
+        val list = mutableListOf<CustomPRHistoryPoint>()
+        val cursor = db.rawQuery(
+            "SELECT date, weight_kg, reps FROM custom_prs_history WHERE exercise_name = ? ORDER BY date ASC",
+            arrayOf(exerciseName)
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(CustomPRHistoryPoint(
+                    date = it.getLong(0),
+                    weightKg = it.getDouble(1),
+                    reps = it.getInt(2)
+                ))
+            }
+        }
+        return list
+    }
+
     companion object {
         const val DATABASE_NAME = "gimnasio.db"
-        const val DATABASE_VERSION = 11
+        const val DATABASE_VERSION = 13
 
         @Volatile
         private var INSTANCE: GimnasioDatabase? = null
