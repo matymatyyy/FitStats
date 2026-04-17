@@ -19,6 +19,7 @@ import com.app.gimnasio.data.model.PRHistoryEntry
 import com.app.gimnasio.data.model.PersonalRecords
 import com.app.gimnasio.data.model.UserProfile
 import com.app.gimnasio.data.model.WorkoutLog
+import com.app.gimnasio.data.model.WorkoutNote
 import com.app.gimnasio.data.model.WorkoutPlanDay
 import com.app.gimnasio.data.model.WorkoutSetLog
 
@@ -203,6 +204,18 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                 date INTEGER NOT NULL
             )
         """)
+
+        db.execSQL("""
+            CREATE TABLE workout_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                routine_id INTEGER,
+                routine_name TEXT NOT NULL,
+                exercise_name TEXT NOT NULL,
+                note TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        db.execSQL("CREATE INDEX idx_notes_routine_exercise ON workout_notes(routine_id, exercise_name)")
 
         // Seed exercise gallery
         seedExerciseGallery(db)
@@ -464,6 +477,19 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
                     date INTEGER NOT NULL
                 )
             """)
+        }
+        if (oldVersion < 14) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS workout_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    routine_id INTEGER,
+                    routine_name TEXT NOT NULL,
+                    exercise_name TEXT NOT NULL,
+                    note TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                )
+            """)
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_notes_routine_exercise ON workout_notes(routine_id, exercise_name)")
         }
     }
 
@@ -1283,9 +1309,57 @@ class GimnasioDatabase(context: Context) : SQLiteOpenHelper(
         return list
     }
 
+    // --- Notes ---
+
+    fun insertWorkoutNote(note: WorkoutNote): Long {
+        val db = writableDatabase
+        return db.insert("workout_notes", null, ContentValues().apply {
+            put("routine_id", note.routineId)
+            put("routine_name", note.routineName)
+            put("exercise_name", note.exerciseName)
+            put("note", note.note)
+            put("created_at", note.createdAt)
+        })
+    }
+
+    fun getNotesForExercise(routineId: Long?, exerciseName: String): List<WorkoutNote> {
+        val db = readableDatabase
+        val list = mutableListOf<WorkoutNote>()
+        val (where, args) = if (routineId != null) {
+            "routine_id = ? AND exercise_name = ?" to arrayOf(routineId.toString(), exerciseName)
+        } else {
+            "routine_id IS NULL AND exercise_name = ?" to arrayOf(exerciseName)
+        }
+        val cursor = db.rawQuery(
+            "SELECT id, routine_id, routine_name, exercise_name, note, created_at " +
+                    "FROM workout_notes WHERE $where ORDER BY created_at DESC",
+            args
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(
+                    WorkoutNote(
+                        id = it.getLong(0),
+                        routineId = if (it.isNull(1)) null else it.getLong(1),
+                        routineName = it.getString(2),
+                        exerciseName = it.getString(3),
+                        note = it.getString(4),
+                        createdAt = it.getLong(5)
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun deleteWorkoutNote(id: Long) {
+        val db = writableDatabase
+        db.delete("workout_notes", "id = ?", arrayOf(id.toString()))
+    }
+
     companion object {
         const val DATABASE_NAME = "gimnasio.db"
-        const val DATABASE_VERSION = 13
+        const val DATABASE_VERSION = 14
 
         @Volatile
         private var INSTANCE: GimnasioDatabase? = null

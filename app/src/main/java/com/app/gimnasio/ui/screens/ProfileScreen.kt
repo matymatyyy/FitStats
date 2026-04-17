@@ -75,6 +75,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import com.app.gimnasio.data.model.BodyMeasurements
@@ -103,7 +105,10 @@ private fun formatDate(millis: Long?): String? {
 }
 
 @Composable
-fun ProfileScreen(viewModel: ProfileViewModel) {
+fun ProfileScreen(
+    viewModel: ProfileViewModel,
+    onNavigateToPRCalculator: () -> Unit = {}
+) {
     val profile by viewModel.profile.collectAsState()
     val measurements by viewModel.measurements.collectAsState()
     val personalRecords by viewModel.personalRecords.collectAsState()
@@ -519,6 +524,58 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Agregar PR", color = LimeGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
+                }
+            }
+        }
+
+        // PR Calculator button
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToPRCalculator() },
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(LimeGreen.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Calculate,
+                            contentDescription = null,
+                            tint = LimeGreen,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Calculadora de PR",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "Estimá tu 1RM desde peso y reps",
+                            color = TextGray,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = TextGray
+                    )
                 }
             }
         }

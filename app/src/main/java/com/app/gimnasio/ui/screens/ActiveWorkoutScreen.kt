@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,14 +13,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.StickyNote2
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.SkipNext
@@ -32,14 +38,22 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,12 +63,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.gimnasio.data.model.ExercisePhase
+import com.app.gimnasio.data.model.WorkoutNote
 import com.app.gimnasio.ui.theme.DarkBackground
+import com.app.gimnasio.ui.theme.DarkBorder
 import com.app.gimnasio.ui.theme.DarkCard
 import com.app.gimnasio.ui.theme.DarkSurface
 import com.app.gimnasio.ui.theme.LimeGreen
 import com.app.gimnasio.ui.theme.TextGray
 import com.app.gimnasio.ui.viewmodel.ActiveWorkoutViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +90,19 @@ fun ActiveWorkoutScreen(
     val isResting by viewModel.isResting.collectAsState()
     val restSecondsRemaining by viewModel.restSecondsRemaining.collectAsState()
     val isFinished by viewModel.isFinished.collectAsState()
+    val notes by viewModel.currentExerciseNotes.collectAsState()
+
+    var showNotesSheet by remember { mutableStateOf(false) }
+
+    val currentExerciseName = currentStep?.let {
+        if (it.isCircuitStep) it.circuitExerciseName else it.exercise.name
+    }
+
+    LaunchedEffect(currentExerciseName, routine?.id) {
+        if (currentExerciseName != null) {
+            viewModel.loadNotesForCurrentExercise()
+        }
+    }
 
     if (isFinished) {
         onFinished()
@@ -429,6 +461,14 @@ fun ActiveWorkoutScreen(
                 }
             }
 
+            if (!isResting && currentExerciseName != null) {
+                Spacer(modifier = Modifier.height(20.dp))
+                NotesButton(
+                    noteCount = notes.size,
+                    onClick = { showNotesSheet = true }
+                )
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
             // Complete button
@@ -482,6 +522,225 @@ fun ActiveWorkoutScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+
+    if (showNotesSheet && currentExerciseName != null) {
+        NotesBottomSheet(
+            exerciseName = currentExerciseName,
+            notes = notes,
+            onAdd = { text -> viewModel.addNoteToCurrentExercise(text) },
+            onDelete = { id -> viewModel.deleteNote(id) },
+            onDismiss = { showNotesSheet = false }
+        )
+    }
+}
+
+@Composable
+private fun NotesButton(noteCount: Int, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(DarkCard)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(LimeGreen.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.StickyNote2,
+                contentDescription = null,
+                tint = LimeGreen,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Notas del ejercicio",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            Text(
+                text = when (noteCount) {
+                    0 -> "Agregá una nota para próximas sesiones"
+                    1 -> "1 nota anterior"
+                    else -> "$noteCount notas anteriores"
+                },
+                color = TextGray,
+                fontSize = 12.sp
+            )
+        }
+        Text(
+            text = if (noteCount > 0) "Ver" else "Agregar",
+            color = LimeGreen,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NotesBottomSheet(
+    exerciseName: String,
+    notes: List<WorkoutNote>,
+    onAdd: (String) -> Unit,
+    onDelete: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var input by remember { mutableStateOf("") }
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = DarkSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            Text(
+                text = "Notas",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+            Text(
+                text = exerciseName,
+                color = LimeGreen,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Escribí una nota (técnica, peso, cómo te sentiste…)", color = TextGray, fontSize = 13.sp) },
+                minLines = 2,
+                maxLines = 5,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = LimeGreen,
+                    unfocusedBorderColor = DarkBorder,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    cursorColor = LimeGreen
+                )
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Button(
+                onClick = {
+                    onAdd(input)
+                    input = ""
+                },
+                enabled = input.isNotBlank(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = LimeGreen,
+                    contentColor = Color.Black,
+                    disabledContainerColor = DarkCard,
+                    disabledContentColor = TextGray
+                )
+            ) {
+                Text("Guardar nota", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Notas anteriores",
+                color = TextGray,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (notes.isEmpty()) {
+                Text(
+                    text = "Todavía no hay notas para este ejercicio en esta rutina.",
+                    color = TextGray,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    notes.forEach { note ->
+                        NoteItem(
+                            note = note,
+                            dateText = dateFormat.format(Date(note.createdAt)),
+                            onDelete = { onDelete(note.id) }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoteItem(note: WorkoutNote, dateText: String, onDelete: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = dateText,
+                    color = TextGray,
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = note.note,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp
+                )
+            }
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Eliminar",
+                    tint = TextGray,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

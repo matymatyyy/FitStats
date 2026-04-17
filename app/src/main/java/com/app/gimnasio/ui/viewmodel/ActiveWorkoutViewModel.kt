@@ -9,6 +9,7 @@ import com.app.gimnasio.data.model.Exercise
 import com.app.gimnasio.data.model.ExercisePhase
 import com.app.gimnasio.data.model.Routine
 import com.app.gimnasio.data.model.WorkoutLog
+import com.app.gimnasio.data.model.WorkoutNote
 import com.app.gimnasio.data.model.WorkoutSetLog
 import com.app.gimnasio.data.repository.RoutineRepository
 import com.app.gimnasio.data.repository.WorkoutRepository
@@ -82,6 +83,9 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
 
     private val _hasActiveWorkout = MutableStateFlow(false)
     val hasActiveWorkout: StateFlow<Boolean> = _hasActiveWorkout.asStateFlow()
+
+    private val _currentExerciseNotes = MutableStateFlow<List<WorkoutNote>>(emptyList())
+    val currentExerciseNotes: StateFlow<List<WorkoutNote>> = _currentExerciseNotes.asStateFlow()
 
     private var timerJob: Job? = null
     private var restTimerJob: Job? = null
@@ -413,5 +417,50 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         val minutes = totalSeconds / 60
         val seconds = totalSeconds % 60
         return "%02d:%02d".format(minutes, seconds)
+    }
+
+    private fun currentExerciseName(): String? {
+        val step = _currentStep.value ?: return null
+        return if (step.isCircuitStep) step.circuitExerciseName else step.exercise.name
+    }
+
+    fun loadNotesForCurrentExercise() {
+        val exName = currentExerciseName() ?: return
+        val routineId = _routine.value?.id
+        viewModelScope.launch {
+            val notes = withContext(Dispatchers.IO) {
+                workoutRepository.getNotesForExercise(routineId, exName)
+            }
+            _currentExerciseNotes.value = notes
+        }
+    }
+
+    fun addNoteToCurrentExercise(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        val exName = currentExerciseName() ?: return
+        val r = _routine.value ?: return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                workoutRepository.insertNote(
+                    WorkoutNote(
+                        routineId = r.id,
+                        routineName = r.name,
+                        exerciseName = exName,
+                        note = trimmed
+                    )
+                )
+            }
+            loadNotesForCurrentExercise()
+        }
+    }
+
+    fun deleteNote(id: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                workoutRepository.deleteNote(id)
+            }
+            loadNotesForCurrentExercise()
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.app.gimnasio.data.repository
 
 import com.app.gimnasio.data.local.GimnasioDatabase
 import com.app.gimnasio.data.model.WorkoutLog
+import com.app.gimnasio.data.model.WorkoutNote
 import com.app.gimnasio.data.model.WorkoutSetLog
 
 class WorkoutRepository(private val db: GimnasioDatabase) {
@@ -27,4 +28,11 @@ class WorkoutRepository(private val db: GimnasioDatabase) {
         db.getLoggedExerciseNames()
 
     fun deleteWorkoutLog(id: Long) = db.deleteWorkoutLog(id)
+
+    fun insertNote(note: WorkoutNote): Long = db.insertWorkoutNote(note)
+
+    fun getNotesForExercise(routineId: Long?, exerciseName: String): List<WorkoutNote> =
+        db.getNotesForExercise(routineId, exerciseName)
+
+    fun deleteNote(id: Long) = db.deleteWorkoutNote(id)
 }

@@ -52,6 +52,7 @@ import com.app.gimnasio.ui.screens.ExerciseDetailScreen
 import com.app.gimnasio.ui.screens.ExerciseGalleryScreen
 import com.app.gimnasio.ui.screens.HomeScreen
 import com.app.gimnasio.ui.screens.MuscleExercisesScreen
+import com.app.gimnasio.ui.screens.PRCalculatorScreen
 import com.app.gimnasio.ui.screens.ProfileScreen
 import com.app.gimnasio.ui.screens.RestTimerScreen
 import com.app.gimnasio.ui.screens.RoutineDetailScreen
@@ -89,6 +90,7 @@ object Routes {
     const val WORKOUT_PLAN = "workout_plan"
     const val EDIT_ROUTINE = "edit_routine/{routineId}"
     const val WELCOME = "welcome"
+    const val PR_CALCULATOR = "pr_calculator"
 
     fun routineDetail(routineId: Long) = "routine/$routineId"
     fun editRoutine(routineId: Long) = "edit_routine/$routineId"
@@ -274,6 +276,7 @@ fun GimnasioNavGraph(navController: NavHostController) {
                     onStartWorkout = { routineId ->
                         navController.navigate(Routes.activeWorkout(routineId))
                     },
+                    onNavigateToPRCalculator = { navController.navigate(Routes.PR_CALCULATOR) },
                     weeklyCount = weeklyCount,
                     weeklyGoal = weeklyGoal,
                     userName = profile.name,
@@ -316,6 +319,21 @@ fun GimnasioNavGraph(navController: NavHostController) {
                     onMuscleGroupClick = { muscle ->
                         navController.navigate(Routes.muscleExercises(muscle))
                     },
+                    onImportRoutine = { name, description, exercises ->
+                        routinesViewModel.createRoutine(name, description, exercises)
+                    },
+                    onImportPlan = { plan ->
+                        plan.days
+                            .map { it.routine }
+                            .distinctBy { it.name }
+                            .forEach { routine ->
+                                routinesViewModel.createRoutine(
+                                    routine.name,
+                                    routine.description,
+                                    routine.exercises
+                                )
+                            }
+                    },
                     viewModel = exerciseGalleryViewModel
                 )
             }
@@ -350,7 +368,10 @@ fun GimnasioNavGraph(navController: NavHostController) {
 
             composable(Routes.PROFILE) {
                 profileViewModel.refreshWorkoutCount()
-                ProfileScreen(viewModel = profileViewModel)
+                ProfileScreen(
+                    viewModel = profileViewModel,
+                    onNavigateToPRCalculator = { navController.navigate(Routes.PR_CALCULATOR) }
+                )
             }
 
             composable(Routes.ROUTINES) {
@@ -466,6 +487,12 @@ fun GimnasioNavGraph(navController: NavHostController) {
                 LaunchedEffect(Unit) { planViewModel.loadRoutines() }
                 WorkoutPlanScreen(
                     viewModel = planViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Routes.PR_CALCULATOR) {
+                PRCalculatorScreen(
                     onBack = { navController.popBackStack() }
                 )
             }

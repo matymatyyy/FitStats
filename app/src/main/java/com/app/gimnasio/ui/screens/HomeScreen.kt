@@ -16,6 +16,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -41,6 +44,7 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
@@ -117,6 +121,7 @@ fun HomeScreen(
     onNavigateToActivity: () -> Unit = {},
     onNavigateToExercises: () -> Unit = {},
     onStartWorkout: (Long) -> Unit = {},
+    onNavigateToPRCalculator: () -> Unit = {},
     weeklyCount: Int = 0,
     weeklyGoal: Int = 5,
     userName: String = "",
@@ -235,7 +240,8 @@ fun HomeScreen(
             onNavigateToProfile = { showSettingsSheet = false; onNavigateToProfile() },
             onNavigateToActivity = { showSettingsSheet = false; onNavigateToActivity() },
             onNavigateToExercises = { showSettingsSheet = false; onNavigateToExercises() },
-            onNavigateToTimer = { showSettingsSheet = false; onNavigateToTimer() }
+            onNavigateToTimer = { showSettingsSheet = false; onNavigateToTimer() },
+            onNavigateToPRCalculator = { showSettingsSheet = false; onNavigateToPRCalculator() }
         )
     }
 }
@@ -861,7 +867,7 @@ private fun StatItem(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsBottomSheet(
     onDismiss: () -> Unit,
@@ -870,7 +876,8 @@ private fun SettingsBottomSheet(
     onNavigateToProfile: () -> Unit,
     onNavigateToActivity: () -> Unit,
     onNavigateToExercises: () -> Unit,
-    onNavigateToTimer: () -> Unit
+    onNavigateToTimer: () -> Unit,
+    onNavigateToPRCalculator: () -> Unit
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -927,6 +934,12 @@ private fun SettingsBottomSheet(
                 title = "Temporizador",
                 subtitle = "Timer de descanso entre series",
                 onClick = onNavigateToTimer
+            )
+            SettingsNavItem(
+                icon = Icons.Default.Calculate,
+                title = "Calculadora de PR",
+                subtitle = "Estimá tu 1RM desde peso y reps",
+                onClick = onNavigateToPRCalculator
             )
 
             HorizontalDivider(
@@ -1049,6 +1062,9 @@ private fun SettingsBottomSheet(
 
             // Time picker for reminder
             if (reminderEnabled) {
+                val presetHours = listOf(7 to 0, 8 to 0, 9 to 0, 10 to 0, 18 to 0, 20 to 0)
+                val isPreset = presetHours.any { (h, m) -> h == reminderHour && m == reminderMinute }
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1056,11 +1072,12 @@ private fun SettingsBottomSheet(
                 ) {
                     Text("Hora:", color = TextGray, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(7 to 0, 8 to 0, 9 to 0).forEach { (h, m) ->
+                        presetHours.forEach { (h, m) ->
                             val selected = reminderHour == h && reminderMinute == m
                             FilterChip(
                                 selected = selected,
@@ -1078,30 +1095,43 @@ private fun SettingsBottomSheet(
                                 )
                             )
                         }
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(10 to 0, 18 to 0, 20 to 0).forEach { (h, m) ->
-                            val selected = reminderHour == h && reminderMinute == m
-                            FilterChip(
-                                selected = selected,
-                                onClick = {
-                                    reminderHour = h
-                                    reminderMinute = m
-                                    ReminderScheduler.schedule(context, h, m)
-                                },
-                                label = { Text("%02d:%02d".format(h, m)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LimeGreen.copy(alpha = 0.2f),
-                                    selectedLabelColor = LimeGreen,
-                                    containerColor = DarkCard,
-                                    labelColor = TextGray
+                        FilterChip(
+                            selected = !isPreset,
+                            onClick = {
+                                android.app.TimePickerDialog(
+                                    context,
+                                    { _, h, m ->
+                                        reminderHour = h
+                                        reminderMinute = m
+                                        ReminderScheduler.schedule(context, h, m)
+                                    },
+                                    reminderHour,
+                                    reminderMinute,
+                                    true
+                                ).show()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
                                 )
+                            },
+                            label = {
+                                Text(
+                                    if (!isPreset) "Personalizada · %02d:%02d".format(reminderHour, reminderMinute)
+                                    else "Personalizada"
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LimeGreen.copy(alpha = 0.2f),
+                                selectedLabelColor = LimeGreen,
+                                selectedLeadingIconColor = LimeGreen,
+                                containerColor = DarkCard,
+                                labelColor = TextGray,
+                                iconColor = TextGray
                             )
-                        }
+                        )
                     }
                 }
             }
